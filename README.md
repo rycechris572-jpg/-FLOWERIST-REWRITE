@@ -1,2 +1,1 @@
-# -FLOWERIST-REWRITE
-🌸 FLOWERIST REWRITE AND MORE FEATURES 
+Doesn't matter if Click Between Frames is on.
