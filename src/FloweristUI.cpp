@@ -317,8 +317,11 @@ class FloweristOverlay final : public CCLayer {
         }
         updateNav();
         if (m_animated) {
-            m_content->setOpacity(0);
-            m_content->runAction(CCFadeTo::create(.18f, 255));
+            // CCNode has no opacity API in this Cocos build, so use a tiny
+            // scale-in transition instead of an unsupported fade call.
+            m_content->setScale(.985f);
+            m_content->runAction(CCEaseSineOut::create(
+                CCScaleTo::create(.18f, 1.f)));
         }
     }
 
@@ -568,4 +571,3 @@ class $modify(FloweristGlobalFrame, CCDirector) {
         CCDirector::drawScene();
     }
 };
-
