@@ -528,15 +528,7 @@ static void refreshBufferHud() {
 }
 
 $on_mod(Loaded) {
-    AllocConsole();
-    FILE* f;
-    freopen_s(&f, "CONOUT$", "w", stdout);
-    SetConsoleTitleA("Flowerist Rewrite - Phase 1 Diagnostics");
-    printf("============================================================\n");
-    printf(" [Flowerist] Phase 1 performance build loaded\n");
-    printf(" [InputBuffer] Starting Mode: STAGE 1 (2 All / 2 Wave)\n");
-    printf(" [Flowerist] F6: 2 -> 4 -> 8 -> 16/8 -> 24 -> 32 -> 48 -> 54 -> 60 -> OFF\n");
-    printf("============================================================\n");
+    log::info("Flowerist Rewrite loaded; console is opt-in from the LOG tab.");
 }
 
 class $modify(BufPlayLayer, PlayLayer) {
