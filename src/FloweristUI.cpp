@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <cstdio>
 
 using namespace geode::prelude;
 namespace {
 constexpr float PANEL_W = 516.f;
 constexpr float PANEL_H = 310.f;
+bool s_consoleVisible = false;
 constexpr float NAV_W = 155.f;
 constexpr int TAB_COUNT = 6;
 const char* TAB_NAMES[TAB_COUNT] = {"LOG", "MODES", "STAGES", "ASSISTS", "SETTINGS", "COMPETITIVE MODE"};
@@ -49,13 +51,23 @@ CCLabelBMFont* label(CCNode* parent,const std::string& txt,float x,float y,float
 
 // Drawn directly: no external assets or font files needed.
 CCDrawNode* makeFlower(CCNode* parent,CCPoint at,float radius,int z=4) {
-    auto d=CCDrawNode::create();
+    auto group=CCDrawNode::create();
+    group->setPosition(at);
+    parent->addChild(group,z);
     for(int j=0;j<5;j++) {
-        float angle=static_cast<float>(j)*6.2831853f/5.f;
-        d->drawDot({std::cos(angle)*radius*0.68f,std::sin(angle)*radius*0.68f},radius*0.55f,ccc4f(1.f,.78f,.89f,.72f));
+        const float angle=static_cast<float>(j)*6.2831853f/5.f-1.5707963f;
+        auto petal=CCDrawNode::create();
+        petal->drawDot({0,0},radius*0.62f,ccc4f(1.f,.70f,.86f,.94f));
+        petal->setScaleX(.68f);
+        petal->setScaleY(1.14f);
+        petal->setPosition({std::cos(angle)*radius*.62f,std::sin(angle)*radius*.62f});
+        petal->setRotation(-angle*57.2957795f);
+        group->addChild(petal,1);
     }
-    d->drawDot({0,0},radius*0.35f,ccc4f(1.f,.93f,.65f,1.f));
-    d->setPosition(at);parent->addChild(d,z);return d;
+    auto center=CCDrawNode::create();
+    center->drawDot({0,0},radius*.30f,ccc4f(1.f,.91f,.62f,1.f));
+    group->addChild(center,2);
+    return group;
 }
 }
 
@@ -105,6 +117,21 @@ class FloweristOverlay final : public CCLayer {
         } else if(action==102) {
             m_animated=!m_animated;
             speech(m_animated?"LOK: Animation is on!":"LOK: Reduced animations enabled.");
+        } else if(action==103) {
+            if(!s_consoleVisible) {
+                if(AllocConsole()) {
+                    FILE* f=nullptr;
+                    freopen_s(&f,"CONOUT$","w",stdout);
+                    freopen_s(&f,"CONOUT$","w",stderr);
+                    SetConsoleTitleA("Flowerist Rewrite - Console");
+                    s_consoleVisible=true;
+                    printf("[Flowerist] Console opened from the LOG tab.\n");
+                } else s_consoleVisible=true;
+            } else {
+                FreeConsole();
+                s_consoleVisible=false;
+            }
+            speech(s_consoleVisible?"LOK: Console opened!":"LOK: Console closed!");
         } else if(action>=200 && action<206) {
             speech(std::string("LOK: ")+std::to_string(action-199)+" selected for preview!");
         } else if(action==300) {
@@ -116,9 +143,13 @@ class FloweristOverlay final : public CCLayer {
     }
     CCMenuItemLabel* addButton(CCNode* target,const std::string& txt,float x,float y,float width,int tag,
                                 SEL_MenuHandler cb,bool nav=false) {
+        if(!nav) {
+            rect(target,x-width*.5f,y-13.f,width,26.f,color(43,29,43,248),5);
+            rect(target,x-width*.5f,y-13.f,width,1.f,color(112,67,91,210),6);
+        }
         auto caption=CCLabelBMFont::create(txt.c_str(),"bigFont.fnt");
         if(!caption)return nullptr;
-        caption->setColor(ccc3(116,59,92));
+        caption->setColor(ccc3(255,235,245));
         caption->setScale(std::min(.55f,width/std::max(1.f,caption->getContentSize().width)));
         auto btn=CCMenuItemLabel::create(caption,this,cb);
         if(!btn)return nullptr;
@@ -133,8 +164,8 @@ class FloweristOverlay final : public CCLayer {
     }
     void updateNav() {
         for(int i=0;i<TAB_COUNT;i++) {
-            if(m_tabs[i]) m_tabs[i]->setColor(i==m_selected?ccc3(247,192,216):ccc3(255,230,241));
-            if(m_glows[i])m_glows[i]->setOpacity(i==m_selected?175:0);
+            if(m_tabs[i]) m_tabs[i]->setColor(i==m_selected?ccc3(83,47,70):ccc3(48,32,47));
+            if(m_glows[i])m_glows[i]->setOpacity(i==m_selected?190:0);
         }
     }
     void buildContent() {
@@ -144,15 +175,20 @@ class FloweristOverlay final : public CCLayer {
         const float cx=337.f;
         label(m_content,TAB_NAMES[m_selected],cx,259.f,287.f,25.f,ccc3(156,65,107),true,"goldFont.fnt");
         label(m_content,TAB_INFO[m_selected],cx,236.f,288.f,14.f,ccc3(158,91,125));
-        rect(m_content,175,68,322,147,color(255,235,244,230),1);
-        rect(m_content,179,72,314,139,color(255,245,250,240),2);
+        rect(m_content,175,68,322,147,color(53,35,51,238),1);
+        rect(m_content,179,72,314,139,color(42,30,42,242),2);
         auto section=[&](const char* title,const char* detail,float y){
             label(m_content,title,cx,y,280,16,ccc3(167,72,116));
             label(m_content,detail,cx,y-20,285,13,ccc3(143,99,121));
         };
         if(m_selected==0) {
-            section("LIVE LOGS","Console output throttled to avoid stutter",180);
-            section("DIAGNOSTICS","Press F6 in-level to cycle tick presets",125);
+            section("LIVE LOGS","Input diagnostics are throttled for performance",180);
+            section("DIAGNOSTICS","Press F6 in-level to cycle tick presets",137);
+            auto consoleMenu=CCMenu::create();
+            consoleMenu->setPosition({0,0});
+            m_content->addChild(consoleMenu,7);
+            addButton(consoleMenu,s_consoleVisible?"CLOSE CONSOLE":"OPEN CONSOLE",cx,91,174,103,
+                      menu_selector(FloweristOverlay::onButton));
         } else if(m_selected==1) {
             section("BUFFER ENGINE","60 tick hard cap • optimized trajectory scan",180);
             section("PROFILES","Balanced / Low End / Custom (planned)",125);
@@ -178,14 +214,14 @@ class FloweristOverlay final : public CCLayer {
         else m_content->setPosition({0,0});
     }
     void decorate() {
-        rect(m_panel,0,0,PANEL_W,PANEL_H,color(231,145,182,255),0);
-        rect(m_panel,3,3,PANEL_W-6,PANEL_H-6,color(255,228,239,255),1);
-        rect(m_panel,7,7,PANEL_W-14,PANEL_H-14,color(255,241,247,255),2);
-        rect(m_panel,7,7,NAV_W,PANEL_H-14,color(251,211,229,255),3);
-        rect(m_panel,NAV_W+7,7,2,PANEL_H-14,color(228,156,189),4);
-        rect(m_panel,9,PANEL_H-52,NAV_W-4,43,color(250,197,220),4);
-        label(m_panel,"FLOWERIST",85,PANEL_H-30,145,23,ccc3(165,53,107),true,"goldFont.fnt");
-        label(m_panel,"BLOOM ENGINE",85,PANEL_H-49,139,12,ccc3(154,88,120));
+        rect(m_panel,0,0,PANEL_W,PANEL_H,color(30,22,34,255),0);
+        rect(m_panel,2,2,PANEL_W-4,PANEL_H-4,color(99,53,78,255),1);
+        rect(m_panel,4,4,PANEL_W-8,PANEL_H-8,color(37,27,40,255),2);
+        rect(m_panel,7,7,NAV_W,PANEL_H-14,color(45,31,45,255),3);
+        rect(m_panel,NAV_W+7,7,1.5f,PANEL_H-14,color(116,70,97),4);
+        rect(m_panel,9,PANEL_H-52,NAV_W-4,43,color(54,35,52),4);
+        label(m_panel,"FLOWERIST",85,PANEL_H-30,145,23,ccc3(255,183,215),true,"goldFont.fnt");
+        label(m_panel,"BLOOM ENGINE",85,PANEL_H-49,139,12,ccc3(198,143,173));
         for(int i=0;i<12;i++) {
             const float x=172.f+(i*73%320);
             const float y=17.f+(i*47%272);
@@ -198,14 +234,14 @@ class FloweristOverlay final : public CCLayer {
         for(int i=0;i<TAB_COUNT;i++) {
             const float y=PANEL_H-85.f-i*36.f;
             m_glows[i]=rect(m_panel,15,y-14,142,28,color(255,122,178,0),4);
-            m_tabs[i]=rect(m_panel,18,y-12,136,24,color(255,230,241),5);
+            m_tabs[i]=rect(m_panel,18,y-12,136,24,color(48,32,47),5);
             m_buttons[i]=addButton(m_panel,TAB_NAMES[i],86,y,126,i,
                                     menu_selector(FloweristOverlay::onTab),true);
         }
         updateNav();
         // LOK speech bubble + oval, flower-topped avatar drawn procedurally.
-        rect(m_panel,183,14,306,42,color(220,149,181),6);
-        rect(m_panel,185,16,302,38,color(255,253,254),7);
+        rect(m_panel,183,14,306,42,color(115,66,94),6);
+        rect(m_panel,185,16,302,38,color(49,34,48),7);
         auto bubble=CCDrawNode::create();
         bubble->drawSegment({200,16},{195,9},2.f,ccc4f(1.f,.99f,1.f,1.f));
         m_panel->addChild(bubble,7);
@@ -213,12 +249,15 @@ class FloweristOverlay final : public CCLayer {
                         ccc3(127,68,103),false);
         auto lok=CCNode::create();lok->setPosition({190,38});m_panel->addChild(lok,10);
         m_lokFace=CCDrawNode::create();
-        m_lokFace->drawDot({0,0},17,ccc4f(1.f,.77f,.88f,1.f));
-        m_lokFace->drawDot({-6,3},2.2f,ccc4f(.4f,.19f,.3f,1.f));
-        m_lokFace->drawDot({6,3},2.2f,ccc4f(.4f,.19f,.3f,1.f));
-        m_lokFace->drawSegment({-3,-5},{3,-5},1.3f,ccc4f(.57f,.32f,.43f,1.f));
-        m_lokFace->setScaleX(1.22f);lok->addChild(m_lokFace,2);
-        makeFlower(lok,{4,17},7.f,3);
+        m_lokFace->drawDot({0,0},19,ccc4f(1.f,.70f,.85f,1.f));
+        m_lokFace->drawDot({-9,-2},3.2f,ccc4f(1.f,.48f,.69f,.76f));
+        m_lokFace->drawDot({9,-2},3.2f,ccc4f(1.f,.48f,.69f,.76f));
+        m_lokFace->drawDot({-6,4},2.0f,ccc4f(.28f,.13f,.24f,1.f));
+        m_lokFace->drawDot({6,4},2.0f,ccc4f(.28f,.13f,.24f,1.f));
+        m_lokFace->drawSegment({-3,-5},{0,-6.2f},1.25f,ccc4f(.48f,.22f,.36f,1.f));
+        m_lokFace->drawSegment({0,-6.2f},{3,-5},1.25f,ccc4f(.48f,.22f,.36f,1.f));
+        m_lokFace->setScaleX(1.42f);lok->addChild(m_lokFace,2);
+        makeFlower(lok,{3,19},7.5f,3);
         label(m_panel,"F2  -  OPEN / CLOSE",78,15,132,10,ccc3(151,91,120),false);
         auto exitMenu=CCMenu::create();exitMenu->setPosition({0,0});m_panel->addChild(exitMenu,12);
         addButton(exitMenu,"X",PANEL_W-22,PANEL_H-21,14,100,menu_selector(FloweristOverlay::onButton));
@@ -318,3 +357,4 @@ class $modify(FloweristGlobalFrame, CCDirector) {
         CCDirector::drawScene();
     }
 };
+
