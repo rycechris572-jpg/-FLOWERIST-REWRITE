@@ -9,6 +9,7 @@
 #include <Windows.h>
 #include <cstdio>
 #include <algorithm>
+#include <cstdint>
 
 using namespace geode::prelude;
 
@@ -21,6 +22,11 @@ using namespace geode::prelude;
 // This keeps isolated micro-clicks and spike/sawblade dodges 100% protected!
 constexpr int SPAM_INTERVAL_TICKS = 8;
 constexpr int SPAM_STREAK_REQUIRED = 3;
+// Limit delay scanning cost while retaining fine-grained search for short delays.
+constexpr int MAX_BUFFER_TICKS = 60;
+constexpr int FINE_SCAN_TICKS = 8;
+constexpr int COARSE_SCAN_SAMPLES = 8;
+constexpr unsigned long long CONSOLE_LOG_INTERVAL_MS = 250;
 
 // ============================================================================
 
@@ -54,6 +60,8 @@ private:
     // Streak-based Spam Guard state
     int  m_ticksSinceLastInput = 999;
     int  m_rapidInputStreak = 0;
+    unsigned long long m_lastConsolePrintMs = 0;
+    unsigned int m_suppressedConsoleMessages = 0;
 
     PlayerObject* createTrajectoryPlayer() {
         PlayLayer* pl = PlayLayer::get();
@@ -111,6 +119,8 @@ public:
         m_firingBuffered = false;
         m_ticksSinceLastInput = 999;
         m_rapidInputStreak = 0;
+        m_lastConsolePrintMs = 0;
+        m_suppressedConsoleMessages = 0;
     }
 
     void quit() {
@@ -129,16 +139,16 @@ public:
         m_rapidInputStreak = 0;
     }
 
-    // F6 cycles through 10 buffer presets and OFF.
+    // F6 cycles through nine presets (maximum 60) and OFF.
     // Single-value presets use the same tick limit for normal and wave.
     void cyclePreset() {
-        m_presetIndex = (m_presetIndex + 1) % 11;
+        m_presetIndex = (m_presetIndex + 1) % 10;
         m_waitTicks = -1;
         m_queuedOpposite = false;
 
-        constexpr int normalTicks[] = {2, 4, 8, 16, 24, 32, 48, 54, 60, 120, 0};
-        constexpr int waveTicks[]   = {2, 4, 8,  8, 24, 32, 48, 54, 60, 120, 0};
-        m_enabled = m_presetIndex != 10;
+        constexpr int normalTicks[] = {2, 4, 8, 16, 24, 32, 48, 54, 60, 0};
+        constexpr int waveTicks[]   = {2, 4, 8,  8, 24, 32, 48, 54, 60, 0};
+        m_enabled = m_presetIndex != 9;
         m_maxTicksNormal = normalTicks[m_presetIndex];
         m_maxTicksWave = waveTicks[m_presetIndex];
 
@@ -146,7 +156,7 @@ public:
             printf("[InputBuffer] F6 Cycle -> STAGE %d: %d Ticks All | %d Ticks Wave\n",
                    m_presetIndex + 1, m_maxTicksNormal, m_maxTicksWave);
         } else {
-            printf("[InputBuffer] F6 Cycle -> STAGE 11: OFF (100%% Raw Input)\n");
+            printf("[Flowerist] F6 Cycle -> OFF (Raw Input)\n");
         }
     }
 
@@ -362,7 +372,7 @@ public:
         // Full Show-Trajectory lookahead for Wave (65 ticks / 50 ticks Mini Wave)
         // so it sees spikes and sawblades 1-3 blocks ahead along the diagonal path!
         int targetHorizon = isMiniWave ? 50 : (isWave ? 65 : 160);
-        int maxDelayFrames = isWave ? m_maxTicksWave : m_maxTicksNormal;
+        int maxDelayFrames = std::clamp(isWave ? m_maxTicksWave : m_maxTicksNormal, 0, MAX_BUFFER_TICKS);
 
         // 4. Check Frame 0 (immediate input) across the full trajectory horizon
         int ticksFrame0 = getSurvivalTicks(pl, p1, p2, isDual, 0, push, targetHorizon);
@@ -376,7 +386,14 @@ public:
         int bestDelay = 0;
         int bestTicks = ticksFrame0;
 
-        for (int delay = 1; delay <= maxDelayFrames; delay++) {
+        // Stage A: check short delays precisely. Stage B: sample long delays sparsely.
+        // This bounds the most expensive simulation loop at 16 candidates/input.
+        const int fineEnd = std::min(maxDelayFrames, FINE_SCAN_TICKS);
+        const int coarseRemaining = std::max(0, maxDelayFrames - fineEnd);
+        const int coarseStride = coarseRemaining > 0
+            ? std::max(1, (coarseRemaining + COARSE_SCAN_SAMPLES - 1) / COARSE_SCAN_SAMPLES)
+            : 1;
+        for (int delay = 1; delay <= maxDelayFrames; ) {
             int ticks = getSurvivalTicks(pl, p1, p2, isDual, delay, push, targetHorizon);
 
             if (isWave) {
@@ -406,11 +423,23 @@ public:
                     bestTicks = ticks;
                 }
             }
+            if (delay < fineEnd) ++delay;
+            else if (delay == fineEnd && coarseRemaining > 0) delay = std::min(maxDelayFrames, fineEnd + coarseStride);
+            else if (delay >= maxDelayFrames) break;
+            else delay = std::min(maxDelayFrames, delay + coarseStride);
         }
 
         if (bestDelay > 0) {
-            printf("[InputBuffer] *** SAVED +%d TICKS (%.2f frames @ 60fps) %s! (Frame0: %d -> Delayed: %d) [Limit: %d] ***\n",
-                bestDelay, bestDelay / 4.0f, act, ticksFrame0, bestTicks, maxDelayFrames);
+            // Throttle expensive console writes under repeated fast inputs.
+            const auto now = static_cast<unsigned long long>(GetTickCount64());
+            if (!m_lastConsolePrintMs || now - m_lastConsolePrintMs >= CONSOLE_LOG_INTERVAL_MS) {
+                printf("[Flowerist] Saved +%d ticks %s (0: %d -> delayed: %d, limit: %d, hidden logs: %u)\n",
+                    bestDelay, act, ticksFrame0, bestTicks, maxDelayFrames, m_suppressedConsoleMessages);
+                m_lastConsolePrintMs = now;
+                m_suppressedConsoleMessages = 0;
+            } else {
+                ++m_suppressedConsoleMessages;
+            }
             m_bufferedPush = push;
             m_waitTicks = bestDelay;
             return false;
@@ -502,11 +531,11 @@ $on_mod(Loaded) {
     AllocConsole();
     FILE* f;
     freopen_s(&f, "CONOUT$", "w", stdout);
-    SetConsoleTitleA("Geode Predictive Input Buffer - Live Console");
+    SetConsoleTitleA("Flowerist Rewrite - Phase 1 Diagnostics");
     printf("============================================================\n");
-    printf(" [InputBuffer] v4.6 LOADED (Wave Spikes/Saws Trajectory Fix)\n");
+    printf(" [Flowerist] Phase 1 performance build loaded\n");
     printf(" [InputBuffer] Starting Mode: STAGE 1 (2 All / 2 Wave)\n");
-    printf(" [InputBuffer] Press F6 in-level to cycle: 2/2 -> 4/4 -> 8/8 -> 16/8 -> 24 -> 32 -> 48 -> 54 -> 60 -> 120 -> OFF\n");
+    printf(" [Flowerist] F6: 2 -> 4 -> 8 -> 16/8 -> 24 -> 32 -> 48 -> 54 -> 60 -> OFF\n");
     printf("============================================================\n");
 }
 
@@ -654,8 +683,11 @@ class $modify(BufBaseGameLayer, GJBaseGameLayer) {
 
     void collisionCheckObjects(PlayerObject* player, gd::vector<GameObject*>* vec, int objectsCount, float dt) {
         if (s_sim.isSimulating()) {
-            gd::vector<GameObject*> extra;
-            extra.reserve(objectsCount);
+            // Reuse capacity rather than allocating on every simulated collision pass.
+            // This hook runs on the main game thread; the vector is not used outside this call.
+            static gd::vector<GameObject*> extra;
+            extra.clear();
+            if (objectsCount > static_cast<int>(extra.capacity())) extra.reserve(objectsCount);
             for (int i = 0; i < objectsCount; i++) {
                 GameObject* obj = vec->at(i);
                 if (!obj) continue;
@@ -678,3 +710,4 @@ class $modify(BufBaseGameLayer, GJBaseGameLayer) {
         GJBaseGameLayer::playerTouchedRing(player, ring);
     }
 };
+
