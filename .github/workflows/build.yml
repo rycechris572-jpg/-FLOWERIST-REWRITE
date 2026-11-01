@@ -1,25 +1,52 @@
-name: Build Predictive Buffer (Windows)
+name: Build VIRGO (Windows)
 on:
   workflow_dispatch:
   push:
     branches: [main, master]
+
 permissions:
-  contents: read
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Apply VIRGO engine mode controls
+        shell: pwsh
+        run: ./apply_virgo_main_patch.ps1
+
+      - name: Commit engine source update
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.cpp
+          git diff --cached --quiet
+          $diffExit = $LASTEXITCODE
+          if ($diffExit -eq 1) {
+            git commit -m "Wire VIRGO gamemode controls into input engine"
+            if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
+            git push origin HEAD:${{ github.ref_name }}
+            if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+          } elseif ($diffExit -ne 0) {
+            throw "git diff check failed with exit code $diffExit"
+          } else {
+            Write-Host "No engine source changes were needed."
+          }
+
       - name: Build Geode mod
         id: build
         uses: geode-sdk/build-geode-mod@main
         with:
           target: Win64
           build-config: Release
+
       - name: Upload compiled mod
         uses: actions/upload-artifact@v4
         with:
-          name: predictive-buffer-windows
+          name: virgo-windows
           path: ${{ steps.build.outputs.build-output }}
           if-no-files-found: error
 
