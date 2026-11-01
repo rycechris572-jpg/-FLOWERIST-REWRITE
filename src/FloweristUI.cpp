@@ -83,13 +83,14 @@ CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
 
 void card(CCNode* parent, float x, float y, float w, float h,
           ccColor4B fill = rgba(20, 25, 49, 250)) {
-    // Layered panels: shadow, violet rim, deep inset and fine top/side highlights.
-    rect(parent, x + 4, y - 5, w, h, rgba(2, 4, 15, 225), 1);
-    rect(parent, x, y, w, h, rgba(91, 83, 151), 2);
-    rect(parent, x + 1, y + 1, w - 2, h - 2, rgba(12, 16, 37), 3);
+    // 3D glass card: offset shadow, outer metal rim, inset bevel and fine specular edges.
+    rect(parent, x + 5, y - 6, w, h, rgba(1, 3, 13, 238), 1);
+    rect(parent, x, y, w, h, rgba(126, 107, 190), 2);
+    rect(parent, x + 1, y + 1, w - 2, h - 2, rgba(8, 12, 31), 3);
     rect(parent, x + 3, y + 3, w - 6, h - 6, fill, 4);
-    rect(parent, x + 10, y + h - 5, w - 20, 1, rgba(171, 154, 234, 145), 5);
-    rect(parent, x + 5, y + 9, 2, h - 18, rgba(133, 111, 220, 120), 5);
+    rect(parent, x + 7, y + h - 6, w - 14, 1.2f, rgba(211, 190, 255, 170), 5);
+    rect(parent, x + 7, y + 6, w - 14, 1, rgba(4, 7, 20, 190), 5);
+    rect(parent, x + 5, y + 10, 2, h - 20, rgba(170, 142, 245, 120), 5);
 }
 
 void star(CCNode* parent, float x, float y, float size, unsigned char opacity, float delay) {
@@ -229,11 +230,18 @@ class FloweristOverlay final : public CCLayer {
                         style == 2 ? ccc3(236, 76, 115) :
                         style == 3 ? ccc3(153, 112, 226) : ccc3(99, 121, 194);
 
+        auto shadow = CCDrawNode::create();
+        if (shadow) {
+            shadow->setPosition({x + 2.f, y - 3.f});
+            drawPill(shadow, w + 2.f, h + 2.f, ccc4f(.015f, .02f, .07f, .94f));
+            parent->addChild(shadow, 7);
+        }
+
         auto glow = CCDrawNode::create();
         if (glow) {
             glow->setPosition({x, y});
-            drawPill(glow, w + 12.f, h + 10.f,
-                     ccc4f(hot.r / 255.f, hot.g / 255.f, hot.b / 255.f, .34f));
+            drawPill(glow, w + 14.f, h + 12.f,
+                     ccc4f(hot.r / 255.f, hot.g / 255.f, hot.b / 255.f, .30f));
             glow->setVisible(false);
             parent->addChild(glow, 8);
         }
@@ -241,8 +249,17 @@ class FloweristOverlay final : public CCLayer {
         auto plate = CCDrawNode::create();
         if (plate) {
             plate->setPosition({x, y});
-            drawPill(plate, w, h, ccc4f(normal.r / 255.f, normal.g / 255.f, normal.b / 255.f, .98f));
+            drawPill(plate, w + 2.f, h + 2.f, ccc4f(.69f, .57f, .91f, .94f));
             parent->addChild(plate, 9);
+            auto inset = CCDrawNode::create();
+            if (inset) {
+                inset->setPosition({x, y});
+                drawPill(inset, w - 2.f, h - 2.f,
+                         ccc4f(normal.r / 255.f, normal.g / 255.f, normal.b / 255.f, .99f));
+                parent->addChild(inset, 10);
+                // Store the inner capsule for hover tinting while the outer rim stays polished.
+                plate = inset;
+            }
         }
 
         auto shine = CCDrawNode::create();
@@ -272,136 +289,247 @@ class FloweristOverlay final : public CCLayer {
 
     void drawBackdrop() {
         const auto win = CCDirector::sharedDirector()->getWinSize();
+        const float w = win.width;
+        const float h = win.height;
 
-        // Deep dusk background. Avoid giant drawDot glows here: those can look
-        // like hard-edged colour blocks on some Geometry Dash/Cocos builds.
-        rect(this, 0, 0, win.width, win.height, rgba(8, 10, 27, 244), -5);
-
-        auto aurora = CCDrawNode::create();
-        if (aurora) {
-            aurora->drawSegment({-20, win.height * .28f},
-                {win.width * .48f, win.height * .34f}, 24.f,
-                ccc4f(.57f, .23f, .57f, .075f));
-            aurora->drawSegment({win.width * .45f, win.height * .20f},
-                {win.width + 20, win.height * .25f}, 18.f,
-                ccc4f(.24f, .30f, .68f, .065f));
-            aurora->drawSegment({win.width * .10f, win.height * .70f},
-                {win.width * .86f, win.height * .76f}, 10.f,
-                ccc4f(.48f, .25f, .62f, .045f));
-            addChild(aurora, -4);
+        // Multi-band sky gradient: deep periwinkle overhead, lavender middle,
+        // warm rose near the horizon. Thin bands avoid the old hard colour slabs.
+        const int bands = 64;
+        for (int i = 0; i < bands; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(bands - 1);
+            const float y = h * t;
+            const float bandH = h / static_cast<float>(bands) + 1.2f;
+            float r, g, b;
+            if (t < .42f) {
+                // Bottom horizon: warm blush fading into lavender.
+                const float q = t / .42f;
+                r = .76f + (.31f - .76f) * q;
+                g = .43f + (.22f - .43f) * q;
+                b = .53f + (.42f - .53f) * q;
+            } else {
+                // Upper sky: lavender fading into deep periwinkle.
+                const float q = (t - .42f) / .58f;
+                r = .31f + (.075f - .31f) * q;
+                g = .22f + (.085f - .22f) * q;
+                b = .42f + (.22f - .42f) * q;
+            }
+            auto strip = CCLayerColor::create(
+                ccc4(static_cast<GLubyte>(r * 255.f), static_cast<GLubyte>(g * 255.f),
+                     static_cast<GLubyte>(b * 255.f), 255), w, bandH);
+            if (strip) {
+                strip->setPosition({0, y});
+                addChild(strip, -10);
+            }
         }
 
-        for (int i = 0; i < 54; ++i) {
-            const float x = ((i * 137 + 43) % 997) / 997.f * win.width;
-            const float y = ((i * 83 + 19) % 983) / 983.f * win.height;
-            star(this, x, y, i % 7 == 0 ? 1.65f : .9f,
-                 static_cast<unsigned char>(70 + (i % 5) * 27), (i % 11) * .13f);
+        // Warm horizon glow and a small sun give the scene a real sky landmark.
+        auto sunGlow = CCDrawNode::create();
+        if (sunGlow) {
+            sunGlow->drawDot({0, 0}, 66.f, ccc4f(1.f, .62f, .77f, .10f));
+            sunGlow->drawDot({0, 0}, 48.f, ccc4f(1.f, .70f, .75f, .15f));
+            sunGlow->drawDot({0, 0}, 31.f, ccc4f(1.f, .79f, .70f, .90f));
+            sunGlow->setPosition({w * .82f, h * .55f});
+            addChild(sunGlow, -7);
+            sunGlow->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCScaleTo::create(3.4f, 1.035f)),
+                CCEaseSineInOut::create(CCScaleTo::create(3.4f, .985f)), nullptr)));
         }
 
-        // A layered flower meadow frames the GUI from behind. The panel sits
-        // above it, while the lower edge and side margins remain visibly alive.
+        // Tiny stars remain visible in the upper sky without competing with text.
+        for (int i = 0; i < 48; ++i) {
+            const float x = ((i * 137 + 43) % 997) / 997.f * w;
+            const float y = h * (.57f + ((i * 83 + 19) % 410) / 1000.f);
+            star(this, x, y, i % 8 == 0 ? 1.55f : .82f,
+                 static_cast<unsigned char>(66 + (i % 5) * 24), (i % 11) * .12f);
+        }
+
+        // Soft cloud clusters. Each cloud is built from circles, never oversized
+        // rectangles or thick bars, and drifts slowly to create gentle parallax.
+        auto addCloud = [this](float x, float y, float scale, float alpha, float delay) {
+            auto cloud = CCDrawNode::create();
+            if (!cloud) return;
+            const auto shade = ccc4f(.91f, .83f, 1.f, alpha * .55f);
+            const auto light = ccc4f(1.f, .86f, .93f, alpha);
+            cloud->drawDot({-22.f * scale, 0}, 14.f * scale, shade);
+            cloud->drawDot({-8.f * scale, 6.f * scale}, 18.f * scale, light);
+            cloud->drawDot({11.f * scale, 2.f * scale}, 16.f * scale, light);
+            cloud->drawDot({26.f * scale, -2.f * scale}, 11.f * scale, shade);
+            cloud->drawSegment({-27.f * scale, -7.f * scale}, {28.f * scale, -7.f * scale},
+                               8.f * scale, shade);
+            cloud->setPosition({x, y});
+            addChild(cloud, -6);
+            cloud->runAction(CCRepeatForever::create(CCSequence::create(
+                CCDelayTime::create(delay),
+                CCEaseSineInOut::create(CCMoveBy::create(7.f + delay, {18.f * scale, 1.8f * scale})),
+                CCEaseSineInOut::create(CCMoveBy::create(7.f + delay, {-18.f * scale, -1.8f * scale})),
+                nullptr)));
+        };
+        addCloud(w * .16f, h * .70f, .92f, .29f, .15f);
+        addCloud(w * .51f, h * .83f, .66f, .23f, .70f);
+        addCloud(w * .91f, h * .72f, 1.04f, .27f, .35f);
+
+        // Distant rolling hills use fine contours and soft translucent layers.
+        auto horizon = CCDrawNode::create();
+        if (horizon) {
+            const ccColor4F farLine = ccc4f(.48f, .58f, .73f, .44f);
+            const ccColor4F nearLine = ccc4f(.39f, .56f, .62f, .54f);
+            horizon->drawSegment({-8, h * .19f}, {w * .17f, h * .235f}, 2.2f, farLine);
+            horizon->drawSegment({w * .17f, h * .235f}, {w * .34f, h * .205f}, 2.2f, farLine);
+            horizon->drawSegment({w * .34f, h * .205f}, {w * .52f, h * .25f}, 2.2f, farLine);
+            horizon->drawSegment({w * .52f, h * .25f}, {w * .72f, h * .205f}, 2.2f, farLine);
+            horizon->drawSegment({w * .72f, h * .205f}, {w + 8, h * .24f}, 2.2f, farLine);
+            horizon->drawSegment({-8, h * .135f}, {w * .22f, h * .17f}, 2.8f, nearLine);
+            horizon->drawSegment({w * .22f, h * .17f}, {w * .43f, h * .145f}, 2.8f, nearLine);
+            horizon->drawSegment({w * .43f, h * .145f}, {w * .70f, h * .18f}, 2.8f, nearLine);
+            horizon->drawSegment({w * .70f, h * .18f}, {w + 8, h * .15f}, 2.8f, nearLine);
+            addChild(horizon, -3);
+        }
+
+        // Ground gradient builds the foreground meadow from deep sage to soft mint.
+        const float groundH = h * .17f;
+        const int groundBands = 18;
+        for (int i = 0; i < groundBands; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(groundBands - 1);
+            const float r = .075f + .055f * t;
+            const float g = .19f + .22f * t;
+            const float b = .22f + .12f * t;
+            auto strip = CCLayerColor::create(
+                ccc4(static_cast<GLubyte>(r * 255.f), static_cast<GLubyte>(g * 255.f),
+                     static_cast<GLubyte>(b * 255.f), 238), w,
+                groundH / static_cast<float>(groundBands) + 1.f);
+            if (strip) {
+                strip->setPosition({0, groundH * static_cast<float>(i) / groundBands});
+                addChild(strip, -2);
+            }
+        }
+
         auto meadow = CCNode::create();
-        addChild(meadow, 3);
-        auto hills = CCDrawNode::create();
-        if (hills) {
-            hills->drawSegment({-20, 10}, {win.width * .50f, 22}, 26.f,
-                               ccc4f(.13f, .29f, .39f, .24f));
-            hills->drawSegment({win.width * .42f, 4}, {win.width + 20, 17}, 34.f,
-                               ccc4f(.20f, .25f, .42f, .20f));
-            hills->drawSegment({-20, 0}, {win.width + 20, 5}, 8.f,
-                               ccc4f(.28f, .49f, .44f, .28f));
-            meadow->addChild(hills, 0);
+        addChild(meadow, 2);
+        // Far flowers are small and translucent; foreground flowers are larger.
+        const float xPos[] = {.025f, .075f, .13f, .20f, .27f, .34f, .42f, .50f,
+                              .58f, .66f, .74f, .82f, .90f, .96f};
+        const float yPos[] = {.055f, .095f, .045f, .075f, .035f, .11f, .055f,
+                              .085f, .04f, .105f, .05f, .085f, .04f, .075f};
+        const float scales[] = {.48f, .72f, .42f, .62f, .50f, .82f, .46f,
+                                .68f, .44f, .78f, .49f, .71f, .45f, .63f};
+        for (int i = 0; i < 14; ++i) {
+            addWindFlower(meadow, xPos[i] * w, yPos[i] * h, scales[i],
+                          (i % 7) * .19f, .48f + (i % 4) * .10f);
         }
+        addWindFlower(meadow, w * .035f, h * .22f, .88f, .38f, .64f);
+        addWindFlower(meadow, w * .085f, h * .31f, .58f, .72f, .42f);
+        addWindFlower(meadow, w * .965f, h * .24f, .92f, .24f, .62f);
+        addWindFlower(meadow, w * .915f, h * .34f, .60f, .58f, .43f);
 
-        const float bottomX[] = {18, 62, 110, 162, 214, 270, 324, 382, 440,
-                                 500, 560, 620, 680, 740, 800, 860, 920, 980,
-                                 1040, 1100, 1160, 1220, 1280, 1340};
-        for (int i = 0; i < 24; ++i) {
-            const float x = bottomX[i] * win.width / 1366.f;
-            const float y = 3.f + (i % 4) * 5.f;
-            const float sizes[] = {.52f, .70f, .44f, .82f, .61f, .47f};
-            addWindFlower(meadow, x, y, sizes[i % 6], (i % 7) * .17f,
-                          .42f + (i % 3) * .08f);
-        }
-
-        // Taller flowers on the uncovered side margins add depth without
-        // putting busy decorations over the central text and cards.
-        addWindFlower(meadow, 24.f, 74.f, .95f, .20f, .62f);
-        addWindFlower(meadow, 58.f, 132.f, .72f, .56f, .48f);
-        addWindFlower(meadow, 92.f, 42.f, .64f, .34f, .52f);
-        addWindFlower(meadow, win.width - 24.f, 83.f, .98f, .43f, .62f);
-        addWindFlower(meadow, win.width - 60.f, 145.f, .70f, .14f, .46f);
-        addWindFlower(meadow, win.width - 98.f, 38.f, .66f, .62f, .52f);
-
-        // Loose petals drift sideways in staggered gusts.
-        for (int i = 0; i < 18; ++i) {
+        // Floating petals travel across the meadow on staggered wind paths.
+        for (int i = 0; i < 20; ++i) {
             auto petal = CCDrawNode::create();
             if (!petal) continue;
-            const float radius = 1.5f + (i % 4) * .38f;
-            petal->drawDot({0, 0}, radius,
-                (i % 2) ? ccc4f(1.f, .55f, .80f, .62f)
-                        : ccc4f(1.f, .78f, .91f, .56f));
-            const float x = (i * 73.f + 35.f) / 18.f;
-            const float y = win.height * (.20f + (i % 6) * .105f);
-            petal->setPosition({x, y});
-            meadow->addChild(petal, 4);
+            const float radius = 1.5f + (i % 4) * .42f;
+            petal->drawDot({0, 0}, radius, (i % 2)
+                ? ccc4f(1.f, .63f, .84f, .66f) : ccc4f(1.f, .83f, .91f, .62f));
+            petal->setPosition({w * (.08f + (i % 10) * .092f),
+                                h * (.20f + (i % 6) * .085f)});
+            meadow->addChild(petal, 5);
             petal->runAction(CCRepeatForever::create(CCSequence::create(
-                CCDelayTime::create((i % 8) * .16f),
-                CCEaseSineInOut::create(CCMoveBy::create(3.2f, {18.f, 5.f})),
-                CCEaseSineInOut::create(CCMoveBy::create(3.2f, {-18.f, -5.f})), nullptr)));
+                CCDelayTime::create((i % 9) * .17f),
+                CCEaseSineInOut::create(CCMoveBy::create(3.5f, {22.f, 7.f})),
+                CCEaseSineInOut::create(CCMoveBy::create(3.5f, {-22.f, -7.f})), nullptr)));
         }
     }
 
     void decorate() {
-        rect(m_panel, 0, 0, PANEL_W, PANEL_H, rgba(77, 65, 130), 0);
-        rect(m_panel, 2, 2, PANEL_W - 4, PANEL_H - 4, rgba(14, 17, 39), 1);
-        rect(m_panel, 5, 5, PANEL_W - 10, PANEL_H - 10, rgba(17, 17, 43), 2);
-        rect(m_panel, 7, 7, NAV_W, PANEL_H - 14, rgba(17, 20, 45), 3);
-        rect(m_panel, NAV_W + 7, 8, 1.5f, PANEL_H - 16, rgba(112, 104, 177), 4);
+        // Three inset rims create a machined, layered glass frame.
+        rect(m_panel, 0, 0, PANEL_W, PANEL_H, rgba(91, 80, 151), 0);
+        rect(m_panel, 2, 2, PANEL_W - 4, PANEL_H - 4, rgba(8, 12, 31), 1);
+        rect(m_panel, 5, 5, PANEL_W - 10, PANEL_H - 10, rgba(15, 18, 42, 236), 2);
+        rect(m_panel, 7, 7, NAV_W, PANEL_H - 14, rgba(13, 17, 39, 246), 3);
+        rect(m_panel, NAV_W + 7, 8, 1.5f, PANEL_H - 16, rgba(145, 129, 207), 4);
+        auto topGlint = CCDrawNode::create();
+        if (topGlint) {
+            topGlint->drawSegment({16, PANEL_H - 4}, {PANEL_W - 18, PANEL_H - 4},
+                                  1.f, ccc4f(.94f, .78f, 1.f, .35f));
+            m_panel->addChild(topGlint, 5);
+        }
 
-        // Flowerist's background is now a dreamy pink meadow at dusk, layered
-        // underneath all cards so the text and controls remain easy to read.
+        // Right-side control area: a restrained twilight gradient with a clean
+        // horizon. The sky stays visible behind the glass without loud colour slabs.
         auto field = CCNode::create();
         m_panel->addChild(field, 3);
-        auto softRibbons = CCDrawNode::create();
-        if (softRibbons) {
-            softRibbons->drawSegment({185, 74}, {690, 96}, 12.f,
-                ccc4f(.65f, .28f, .66f, .075f));
-            softRibbons->drawSegment({205, 286}, {665, 306}, 7.f,
-                ccc4f(.31f, .39f, .75f, .055f));
-            softRibbons->drawSegment({245, 178}, {640, 168}, 5.f,
-                ccc4f(.83f, .43f, .72f, .04f));
-            field->addChild(softRibbons, 0);
+        const float fieldX = NAV_W + 9.f;
+        const float fieldW = PANEL_W - fieldX - 8.f;
+        const float fieldY = 8.f;
+        const float fieldH = PANEL_H - 16.f;
+        const int glassBands = 36;
+        for (int i = 0; i < glassBands; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(glassBands - 1);
+            const float r = .055f + .11f * t;
+            const float g = .075f + .055f * t;
+            const float b = .18f + .14f * t;
+            auto strip = CCLayerColor::create(
+                ccc4(static_cast<GLubyte>(r * 255.f), static_cast<GLubyte>(g * 255.f),
+                     static_cast<GLubyte>(b * 255.f), 232), fieldW,
+                fieldH / static_cast<float>(glassBands) + .8f);
+            if (strip) {
+                strip->setPosition({fieldX, fieldY + fieldH * static_cast<float>(i) / glassBands});
+                field->addChild(strip, 0);
+            }
         }
-        auto hills = CCDrawNode::create();
-        if (hills) {
-            hills->drawSegment({178, 17}, {700, 25}, 16.f, ccc4f(.18f, .34f, .45f, .22f));
-            hills->drawSegment({178, 9}, {700, 14}, 8.f, ccc4f(.20f, .45f, .48f, .20f));
-            field->addChild(hills, 1);
-        }
-        const float flowerX[] = {190, 224, 263, 306, 352, 398, 447, 493, 540, 588, 634, 676, 704};
-        const float flowerY[] = {12, 19, 9, 16, 11, 22, 10, 18, 12, 20, 10, 16, 11};
-        const float flowerScale[] = {.62f, .44f, .74f, .49f, .67f, .43f, .75f, .47f, .64f, .45f, .71f, .50f, .61f};
-        for (int i = 0; i < 13; ++i) {
-            addWindFlower(field, flowerX[i], flowerY[i], flowerScale[i], (i % 5) * .16f, .74f);
-        }
-        addWindFlower(field, 188, 43, .68f, .25f, .44f);
-        addWindFlower(field, 690, 46, .72f, .52f, .42f);
-        addWindFlower(field, 655, 29, .43f, .09f, .37f);
-        addWindFlower(field, 188, 143, .42f, .42f, .25f);
-        addWindFlower(field, 696, 198, .38f, .72f, .24f);
 
-        for (int i = 0; i < 12; ++i) {
+        // A soft horizon sheen and distant cloud wisps add atmosphere without
+        // covering the cards or creating the previous chunky rectangles.
+        auto horizon = CCDrawNode::create();
+        if (horizon) {
+            horizon->drawSegment({fieldX + 8, 58}, {PANEL_W - 10, 65}, 1.5f,
+                                 ccc4f(.91f, .58f, .82f, .30f));
+            horizon->drawSegment({fieldX + 18, 48}, {PANEL_W - 14, 54}, 1.f,
+                                 ccc4f(.60f, .72f, .91f, .22f));
+            field->addChild(horizon, 1);
+        }
+        auto cloudA = CCDrawNode::create();
+        if (cloudA) {
+            cloudA->drawDot({0, 0}, 14, ccc4f(.77f, .75f, .98f, .055f));
+            cloudA->drawDot({17, 4}, 17, ccc4f(.91f, .72f, .94f, .065f));
+            cloudA->drawDot({35, 0}, 12, ccc4f(.80f, .78f, 1.f, .05f));
+            cloudA->setPosition({fieldX + 44, 303});
+            field->addChild(cloudA, 1);
+            cloudA->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCMoveBy::create(6.f, {13.f, 1.f})),
+                CCEaseSineInOut::create(CCMoveBy::create(6.f, {-13.f, -1.f})), nullptr)));
+        }
+        auto cloudB = CCDrawNode::create();
+        if (cloudB) {
+            cloudB->drawDot({0, 0}, 10, ccc4f(.76f, .75f, .98f, .045f));
+            cloudB->drawDot({13, 3}, 13, ccc4f(.94f, .75f, .94f, .055f));
+            cloudB->drawDot({28, 0}, 9, ccc4f(.80f, .80f, 1.f, .045f));
+            cloudB->setPosition({PANEL_W - 120, 278});
+            field->addChild(cloudB, 1);
+            cloudB->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCMoveBy::create(7.f, {-10.f, 1.f})),
+                CCEaseSineInOut::create(CCMoveBy::create(7.f, {10.f, -1.f})), nullptr)));
+        }
+
+        // A low, irregular flower border reads as a meadow rather than a tiled strip.
+        const float flowerX[] = {184, 213, 258, 306, 356, 410, 468, 522, 579, 631, 680};
+        const float flowerY[] = {10, 22, 13, 32, 15, 25, 11, 29, 14, 23, 12};
+        const float flowerScale[] = {.45f, .65f, .43f, .73f, .50f, .68f, .42f, .71f, .46f, .64f, .44f};
+        for (int i = 0; i < 11; ++i) {
+            addWindFlower(field, flowerX[i], flowerY[i], flowerScale[i], (i % 6) * .21f, .49f);
+        }
+        addWindFlower(field, 190, 76, .54f, .34f, .34f);
+        addWindFlower(field, 687, 90, .58f, .74f, .32f);
+
+        for (int i = 0; i < 16; ++i) {
             auto petal = CCDrawNode::create();
             if (!petal) continue;
-            petal->drawDot({0, 0}, 1.7f + (i % 3) * .45f, ccc4f(1.f, .56f, .82f, .50f));
-            petal->setPosition({205.f + static_cast<float>((i * 41) % 465),
-                                86.f + static_cast<float>((i * 37) % 245)});
+            petal->drawDot({0, 0}, 1.5f + (i % 3) * .35f, ccc4f(1.f, .66f, .86f, .42f));
+            petal->setPosition({fieldX + 22.f + static_cast<float>((i * 47) % 480),
+                                92.f + static_cast<float>((i * 31) % 226)});
             field->addChild(petal, 2);
             petal->runAction(CCRepeatForever::create(CCSequence::create(
-                CCDelayTime::create((i % 6) * .11f),
-                CCEaseSineInOut::create(CCMoveBy::create(2.7f, {12.f, 3.f})),
-                CCEaseSineInOut::create(CCMoveBy::create(2.7f, {-12.f, -3.f})), nullptr)));
+                CCDelayTime::create((i % 7) * .13f),
+                CCEaseSineInOut::create(CCMoveBy::create(3.1f, {10.f, 2.5f})),
+                CCEaseSineInOut::create(CCMoveBy::create(3.1f, {-10.f, -2.5f})), nullptr)));
         }
 
         for (int i = 0; i < 22; ++i) {
