@@ -41,7 +41,7 @@ CCLayerColor* rect(CCNode* parent, float x, float y, float w, float h, ccColor4B
 
 CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
                     float maxW, float maxH, ccColor3B tint = ccc3(225, 226, 246),
-                    const char* font = "bigFont.fnt") {
+                    const char* font = "bigFont.fnt", float maxScale = .62f) {
     // Long descriptions wrap into readable lines. Short labels (including every
     // navigation/tab label) remain single-line and keep their existing styling.
     std::string layout = value;
@@ -73,7 +73,7 @@ CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
     const auto size = node->getContentSize();
     const float fitX = maxW / std::max(1.f, size.width);
     const float fitY = maxH / std::max(1.f, size.height);
-    node->setScale(std::min({.78f, fitX, fitY}));
+    node->setScale(std::min({maxScale, fitX, fitY}));
     node->setColor(tint);
     node->setAnchorPoint({.5f, .5f});
     node->setPosition({x, y});
@@ -129,6 +129,51 @@ void flower(CCNode* parent, CCPoint at, float radius) {
     node->drawDot({0, 0}, radius * .34f, ccc4f(1.f, .84f, .48f, 1.f));
     parent->addChild(node, 4);
 }
+
+void drawPill(CCDrawNode* node, float width, float height, ccColor4F color) {
+    if (!node) return;
+    node->clear();
+    const float r = height * .5f;
+    const float left = -width * .5f + r;
+    const float right = width * .5f - r;
+    node->drawSegment({left, 0}, {right, 0}, r, color);
+    node->drawDot({left, 0}, r, color);
+    node->drawDot({right, 0}, r, color);
+}
+
+void addWindFlower(CCNode* parent, float x, float y, float scale, float delay, float alpha) {
+    auto plant = CCNode::create();
+    if (!plant) return;
+    plant->setPosition({x, y});
+    const float h = 68.f * scale;
+    auto art = CCDrawNode::create();
+    if (!art) return;
+
+    const auto stem = ccc4f(.38f, .77f, .61f, alpha);
+    const auto leaf = ccc4f(.52f, .86f, .67f, alpha * .95f);
+    const auto pink = ccc4f(1.f, .42f, .77f, alpha);
+    const auto lightPink = ccc4f(1.f, .72f, .90f, alpha * .94f);
+    art->drawSegment({0, 0}, {0, h}, 1.5f * scale, stem);
+    art->drawSegment({0, h * .32f}, {-11.f * scale, h * .47f}, 2.1f * scale, leaf);
+    art->drawSegment({-11.f * scale, h * .47f}, {-16.f * scale, h * .44f}, 1.3f * scale, leaf);
+    art->drawSegment({0, h * .56f}, {10.f * scale, h * .70f}, 2.1f * scale, leaf);
+    art->drawSegment({10.f * scale, h * .70f}, {15.f * scale, h * .67f}, 1.3f * scale, leaf);
+    for (int i = 0; i < 6; ++i) {
+        const float a = i * PI / 3.f;
+        art->drawDot({std::cos(a) * 6.8f * scale, h + std::sin(a) * 6.8f * scale},
+                     5.5f * scale, (i % 2) ? pink : lightPink);
+    }
+    art->drawDot({0, h}, 3.3f * scale, ccc4f(1.f, .86f, .48f, alpha));
+    plant->addChild(art);
+    parent->addChild(plant, 3);
+
+    // Alternating gusts make nearby flower heads sway like a field in a light breeze.
+    plant->runAction(CCRepeatForever::create(CCSequence::create(
+        CCDelayTime::create(delay),
+        CCEaseSineInOut::create(CCRotateTo::create(1.15f, 5.8f)),
+        CCEaseSineInOut::create(CCRotateTo::create(2.25f, -5.8f)),
+        CCEaseSineInOut::create(CCRotateTo::create(1.15f, 0.f)), nullptr)));
+}
 }
 
 class FloweristOverlay final : public CCLayer {
@@ -138,8 +183,8 @@ class FloweristOverlay final : public CCLayer {
         float width;
         float height;
         CCNode* space;
-        CCLayerColor* plate;
-        CCLayerColor* glow;
+        CCDrawNode* plate;
+        CCDrawNode* glow;
         ccColor3B normal;
         ccColor3B hot;
         bool page;
@@ -174,22 +219,41 @@ class FloweristOverlay final : public CCLayer {
 
     void button(CCNode* parent, const std::string& caption, float x, float y,
                 float w, float h, int tag, bool page = false, bool modal = false, int style = 0) {
-        // YES = green, NO = red; other buttons use an indigo/violet palette.
-        ccColor3B normal = style == 1 ? ccc3(35, 91, 75) :
-                           style == 2 ? ccc3(105, 43, 63) :
-                           style == 3 ? ccc3(77, 58, 121) : ccc3(35, 43, 76);
-        ccColor3B hot = style == 1 ? ccc3(35, 190, 120) :
-                        style == 2 ? ccc3(229, 64, 91) :
-                        style == 3 ? ccc3(124, 93, 205) : ccc3(79, 107, 174);
-        rect(parent, x - w * .5f + 3, y - h * .5f - 3, w, h, rgba(3, 5, 17, 220), 7);
-        auto glow = rect(parent, x - w * .5f - 3, y - h * .5f - 3, w + 6, h + 6, rgba(95, 123, 255, 0), 8);
-        auto plate = rect(parent, x - w * .5f, y - h * .5f, w, h,
-                          rgba(normal.r, normal.g, normal.b), 9);
-        rect(parent, x - w * .5f + 5, y + h * .5f - 5, w - 10, 1, rgba(205, 207, 255, 115), 10);
-        rect(parent, x - w * .5f + 4, y - h * .5f + 5, 2, h - 10,
-             style == 1 ? rgba(67, 226, 159, 230) :
-             style == 2 ? rgba(245, 91, 119, 230) : rgba(147, 126, 240, 210), 10);
-        text(parent, caption, x + 2, y, w - 18, h * .58f, ccc3(247, 242, 255));
+        // Wide oval buttons with a colored hover halo.
+        ccColor3B normal = style == 1 ? ccc3(34, 104, 82) :
+                           style == 2 ? ccc3(112, 47, 72) :
+                           style == 3 ? ccc3(91, 66, 145) : ccc3(42, 46, 83);
+        ccColor3B hot = style == 1 ? ccc3(43, 194, 130) :
+                        style == 2 ? ccc3(236, 76, 115) :
+                        style == 3 ? ccc3(153, 112, 226) : ccc3(99, 121, 194);
+
+        auto glow = CCDrawNode::create();
+        if (glow) {
+            glow->setPosition({x, y});
+            drawPill(glow, w + 12.f, h + 10.f,
+                     ccc4f(hot.r / 255.f, hot.g / 255.f, hot.b / 255.f, .34f));
+            glow->setVisible(false);
+            parent->addChild(glow, 8);
+        }
+
+        auto plate = CCDrawNode::create();
+        if (plate) {
+            plate->setPosition({x, y});
+            drawPill(plate, w, h, ccc4f(normal.r / 255.f, normal.g / 255.f, normal.b / 255.f, .98f));
+            parent->addChild(plate, 9);
+        }
+
+        auto shine = CCDrawNode::create();
+        if (shine) {
+            shine->setPosition({x, y});
+            shine->drawSegment({-w * .30f, h * .24f}, {w * .30f, h * .24f}, .9f,
+                               ccc4f(.96f, .91f, 1.f, .25f));
+            parent->addChild(shine, 10);
+        }
+
+        const bool isTab = !page && !modal && tag >= 0 && tag < TAB_COUNT;
+        text(parent, caption, x + 1, y, w - 18.f, h * .58f,
+             ccc3(249, 245, 255), "bigFont.fnt", isTab ? .78f : .60f);
         m_hits.push_back({tag, {x, y}, w, h, parent, plate, glow, normal, hot, page, modal});
     }
 
@@ -199,7 +263,8 @@ class FloweristOverlay final : public CCLayer {
             const bool selected = hit.tag == m_selected;
             hit.normal = selected ? ccc3(77, 58, 121) : ccc3(35, 43, 76);
             hit.hot = selected ? ccc3(124, 93, 205) : ccc3(79, 107, 174);
-            if (hit.plate) hit.plate->setColor(hit.normal);
+            if (hit.plate) drawPill(hit.plate, hit.width, hit.height,
+                ccc4f(hit.normal.r / 255.f, hit.normal.g / 255.f, hit.normal.b / 255.f, .98f));
         }
     }
 
@@ -225,9 +290,51 @@ class FloweristOverlay final : public CCLayer {
     void decorate() {
         rect(m_panel, 0, 0, PANEL_W, PANEL_H, rgba(77, 65, 130), 0);
         rect(m_panel, 2, 2, PANEL_W - 4, PANEL_H - 4, rgba(14, 17, 39), 1);
-        rect(m_panel, 5, 5, PANEL_W - 10, PANEL_H - 10, rgba(22, 22, 49), 2);
-        rect(m_panel, 7, 7, NAV_W, PANEL_H - 14, rgba(17, 21, 45), 3);
+        rect(m_panel, 5, 5, PANEL_W - 10, PANEL_H - 10, rgba(17, 17, 43), 2);
+        rect(m_panel, 7, 7, NAV_W, PANEL_H - 14, rgba(17, 20, 45), 3);
         rect(m_panel, NAV_W + 7, 8, 1.5f, PANEL_H - 16, rgba(112, 104, 177), 4);
+
+        // Flowerist's background is now a dreamy pink meadow at dusk, layered
+        // underneath all cards so the text and controls remain easy to read.
+        auto field = CCNode::create();
+        m_panel->addChild(field, 3);
+        auto glowClouds = CCDrawNode::create();
+        if (glowClouds) {
+            glowClouds->drawDot({426, 73}, 170, ccc4f(.66f, .22f, .56f, .12f));
+            glowClouds->drawDot({603, 134}, 122, ccc4f(.31f, .29f, .76f, .10f));
+            glowClouds->drawDot({248, 324}, 98, ccc4f(.72f, .28f, .57f, .08f));
+            field->addChild(glowClouds, 0);
+        }
+        auto hills = CCDrawNode::create();
+        if (hills) {
+            hills->drawSegment({178, 17}, {700, 25}, 16.f, ccc4f(.18f, .34f, .45f, .22f));
+            hills->drawSegment({178, 9}, {700, 14}, 8.f, ccc4f(.20f, .45f, .48f, .20f));
+            field->addChild(hills, 1);
+        }
+        const float flowerX[] = {190, 224, 263, 306, 352, 398, 447, 493, 540, 588, 634, 676, 704};
+        const float flowerY[] = {12, 19, 9, 16, 11, 22, 10, 18, 12, 20, 10, 16, 11};
+        const float flowerScale[] = {.62f, .44f, .74f, .49f, .67f, .43f, .75f, .47f, .64f, .45f, .71f, .50f, .61f};
+        for (int i = 0; i < 13; ++i) {
+            addWindFlower(field, flowerX[i], flowerY[i], flowerScale[i], (i % 5) * .16f, .74f);
+        }
+        addWindFlower(field, 188, 43, .68f, .25f, .44f);
+        addWindFlower(field, 690, 46, .72f, .52f, .42f);
+        addWindFlower(field, 655, 29, .43f, .09f, .37f);
+        addWindFlower(field, 188, 143, .42f, .42f, .25f);
+        addWindFlower(field, 696, 198, .38f, .72f, .24f);
+
+        for (int i = 0; i < 12; ++i) {
+            auto petal = CCDrawNode::create();
+            if (!petal) continue;
+            petal->drawDot({0, 0}, 1.7f + (i % 3) * .45f, ccc4f(1.f, .56f, .82f, .50f));
+            petal->setPosition({205.f + static_cast<float>((i * 41) % 465),
+                                86.f + static_cast<float>((i * 37) % 245)});
+            field->addChild(petal, 2);
+            petal->runAction(CCRepeatForever::create(CCSequence::create(
+                CCDelayTime::create((i % 6) * .11f),
+                CCEaseSineInOut::create(CCMoveBy::create(2.7f, {12.f, 3.f})),
+                CCEaseSineInOut::create(CCMoveBy::create(2.7f, {-12.f, -3.f})), nullptr)));
+        }
 
         for (int i = 0; i < 22; ++i) {
             auto dot = CCDrawNode::create();
@@ -254,12 +361,12 @@ class FloweristOverlay final : public CCLayer {
         text(m_panel, "BUILD 02  /  60 TICK CAP", 99, PANEL_H - 74, 126, 10, ccc3(104, 131, 185));
 
         for (int i = 0; i < TAB_COUNT; ++i) {
-            const float y = PANEL_H - 118.f - i * 42.f;
+            const float y = PANEL_H - 124.f - i * 47.f;
             button(m_panel, TAB_NAMES[i], 91, y, 148, 31, i, false, false, i == m_selected ? 3 : 0);
         }
-        button(m_panel, "GUI GUIDE", 91, 36, 148, 32, 110);
+        button(m_panel, "GUI GUIDE", 91, 35, 150, 30, 110);
         text(m_panel, "F2  MENU  /  CLOSE", 91, 12, 140, 9, ccc3(94, 119, 170));
-        button(m_panel, "X", PANEL_W - 24, PANEL_H - 25, 30, 28, 100);
+        button(m_panel, "X", PANEL_W - 24, PANEL_H - 25, 34, 30, 100);
         text(m_panel, "FLOWERIST  //  SPACE SYSTEMS", 224, PANEL_H - 28, 380, 13, ccc3(117, 143, 204));
         text(m_panel, "ONLINE", PANEL_W - 95, PANEL_H - 28, 68, 12, ccc3(96, 230, 183));
         updateNav();
@@ -308,14 +415,14 @@ class FloweristOverlay final : public CCLayer {
             const char* names[] = {"LOW-END", "BALANCED", "CUSTOM"};
             const char* detail[] = {"Prioritizes a lighter interface", "A balanced default profile", "A manually configured profile"};
             for (int i = 0; i < 3; ++i) {
-                const float x = 278.f + i * 151.f;
-                card(m_content, x - 69, 169, 138, 148,
-                     i == m_selectedMode ? rgba(42, 34, 78, 255) : rgba(20, 26, 51, 255));
-                text(m_content, names[i], x, 279, 124, 18,
+                const float x = 270.f + i * 160.f;
+                card(m_content, x - 73, 169, 146, 148,
+                     i == m_selectedMode ? rgba(43, 35, 80, 255) : rgba(22, 26, 54, 255));
+                text(m_content, names[i], x, 279, 130, 18,
                      i == m_selectedMode ? ccc3(232, 211, 255) : ccc3(177, 188, 226));
-                text(m_content, detail[i], x, 239, 118, 38, ccc3(138, 158, 208));
+                text(m_content, detail[i], x, 239, 124, 38, ccc3(145, 162, 214));
                 button(m_content, i == m_selectedMode ? "SELECTED" : "SELECT",
-                       x, 192, 112, 31, 210 + i, true, false, i == m_selectedMode ? 3 : 0);
+                       x, 192, 122, 32, 210 + i, true, false, i == m_selectedMode ? 3 : 0);
             }
             text(m_content, "The engine remains capped at 60 ticks in every profile.",
                  430, 125, 430, 27, ccc3(142, 167, 226));
@@ -331,15 +438,15 @@ class FloweristOverlay final : public CCLayer {
             for (int i = 0; i < 6; ++i) {
                 const int col = i % 3;
                 const int row = i / 3;
-                const float x = 278.f + col * 150.f;
-                const float y = row == 0 ? 244.f : 137.f;
-                card(m_content, x - 67, y - 38, 134, 86,
-                     i == m_selectedStage ? rgba(51, 39, 88, 255) : fills[i]);
-                text(m_content, names[i], x, y + 18, 118, 17,
+                const float x = 270.f + col * 160.f;
+                const float y = row == 0 ? 244.f : 136.f;
+                card(m_content, x - 73, y - 40, 146, 92,
+                     i == m_selectedStage ? rgba(52, 39, 90, 255) : fills[i]);
+                text(m_content, names[i], x, y + 19, 130, 17,
                      i == m_selectedStage ? ccc3(238, 214, 255) : ccc3(184, 194, 233));
-                text(m_content, detail[i], x, y - 3, 114, 13, ccc3(135, 161, 218));
-                button(m_content, i == m_selectedStage ? "ACTIVE" : "CHOOSE", x, y - 26,
-                       108, 24, 200 + i, true, false, i == m_selectedStage ? 3 : 0);
+                text(m_content, detail[i], x, y - 3, 122, 13, ccc3(145, 166, 220));
+                button(m_content, i == m_selectedStage ? "ACTIVE" : "CHOOSE", x, y - 27,
+                       118, 25, 200 + i, true, false, i == m_selectedStage ? 3 : 0);
             }
         } else if (m_selected == 3) {
             card(m_content, 202, 194, 223, 132, rgba(23, 31, 57, 255));
@@ -376,128 +483,115 @@ class FloweristOverlay final : public CCLayer {
 
         updateNav();
         if (m_animated) {
-            // CCNode has no opacity API in this Cocos build; use a subtle scale-in.
+            // CCNode has no opacity API in this Cocos2d build; use a subtle scale-in.
             m_content->setScale(.985f);
             m_content->runAction(CCEaseSineOut::create(CCScaleTo::create(.18f, 1.f)));
         }
     }
 
     void drawLOK() {
-        // LOK is an original rounded gamepad/cloud mascot with a flower crest.
-        // The Discord-like silhouette is only a visual reference, not a logo copy.
+        // LOK: a rounded controller-inspired mascot with a pink flower crest.
+        // Keep the character on the left and a compact speech bubble on the right.
         auto portrait = CCNode::create();
-        portrait->setPosition({278, 231});
+        portrait->setPosition({250, 218});
         m_modalLayer->addChild(portrait, 30);
 
         auto orbit = CCDrawNode::create();
-        orbit->drawSegment({-57, 0}, {57, 0}, 1.4f, ccc4f(.60f, .61f, 1.f, .44f));
-        orbit->drawSegment({0, -43}, {0, 43}, 1.1f, ccc4f(.60f, .61f, 1.f, .24f));
-        orbit->drawDot({-51, 0}, 3.5f, ccc4f(.63f, .76f, 1.f, .90f));
-        orbit->drawDot({51, 0}, 3.5f, ccc4f(1.f, .55f, .81f, .90f));
+        orbit->drawSegment({-48, 0}, {48, 0}, 1.2f, ccc4f(.67f, .61f, 1.f, .33f));
+        orbit->drawSegment({0, -38}, {0, 38}, 1.0f, ccc4f(.67f, .61f, 1.f, .20f));
+        orbit->drawDot({-43, 0}, 3.f, ccc4f(.63f, .76f, 1.f, .86f));
+        orbit->drawDot({43, 0}, 3.f, ccc4f(1.f, .55f, .81f, .86f));
         portrait->addChild(orbit, 0);
-        orbit->runAction(CCRepeatForever::create(CCRotateBy::create(13.f, 360.f)));
+        if (m_animated) orbit->runAction(CCRepeatForever::create(CCRotateBy::create(15.f, 360.f)));
 
         auto aura = CCDrawNode::create();
-        aura->drawDot({0, 0}, 69, ccc4f(.45f, .28f, .96f, .18f));
-        aura->drawDot({0, 0}, 55, ccc4f(.72f, .39f, .99f, .14f));
+        aura->drawDot({0, 0}, 55, ccc4f(.61f, .31f, .94f, .17f));
+        aura->drawDot({0, 0}, 43, ccc4f(.95f, .40f, .77f, .12f));
         portrait->addChild(aura, 1);
-        if (m_animated) {
-            aura->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCScaleTo::create(1.15f, 1.09f)),
-                CCEaseSineInOut::create(CCScaleTo::create(1.15f, .94f)), nullptr)));
-        }
+        if (m_animated) aura->runAction(CCRepeatForever::create(CCSequence::create(
+            CCEaseSineInOut::create(CCScaleTo::create(1.2f, 1.08f)),
+            CCEaseSineInOut::create(CCScaleTo::create(1.2f, .94f)), nullptr)));
 
         auto shadow = CCDrawNode::create();
-        shadow->drawDot({0, -9}, 37, ccc4f(.02f, .03f, .10f, .48f));
-        shadow->setScaleX(1.25f);
+        shadow->drawDot({0, -25}, 28, ccc4f(.02f, .02f, .09f, .40f));
         portrait->addChild(shadow, 2);
 
-        // Soft rounded gamepad body built from overlapping circles and capsules.
-        auto shell = CCDrawNode::create();
-        const auto shellColor = ccc4f(.94f, .56f, .82f, 1.f);
-        const auto shellShade = ccc4f(.78f, .36f, .72f, 1.f);
-        shell->drawSegment({-19, 20}, {19, 20}, 24, shellColor);
-        shell->drawSegment({-27, 7}, {27, 7}, 27, shellColor);
-        shell->drawSegment({-25, -9}, {25, -9}, 22, shellColor);
-        shell->drawDot({-25, 1}, 13.5f, shellColor);
-        shell->drawDot({25, 1}, 13.5f, shellColor);
-        shell->drawDot({0, 4}, 37.5f, shellColor);
-        shell->drawSegment({-19, 25}, {-25, 34}, 7, shellShade);
-        shell->drawSegment({19, 25}, {25, 34}, 7, shellShade);
-        shell->drawSegment({-16, 29}, {12, 29}, 3, ccc4f(1.f, .90f, .98f, .66f));
-        portrait->addChild(shell, 3);
+        auto body = CCDrawNode::create();
+        const auto shell = ccc4f(.94f, .57f, .83f, 1.f);
+        const auto shade = ccc4f(.80f, .38f, .73f, 1.f);
+        body->drawSegment({-18, 12}, {18, 12}, 22, shell);
+        body->drawSegment({-27, -3}, {27, -3}, 25, shell);
+        body->drawSegment({-22, -14}, {22, -14}, 17, shell);
+        body->drawDot({-26, -3}, 15, shell);
+        body->drawDot({26, -3}, 15, shell);
+        body->drawDot({0, 3}, 34, shell);
+        body->drawSegment({-19, 21}, {-25, 31}, 6, shade);
+        body->drawSegment({19, 21}, {25, 31}, 6, shade);
+        body->drawSegment({-14, 25}, {13, 25}, 2.5f, ccc4f(1.f, .91f, .98f, .72f));
+        portrait->addChild(body, 3);
 
-        // Separate eye nodes make blinking smooth and easy to animate.
         auto leftEye = CCDrawNode::create();
-        leftEye->drawDot({0, 0}, 4.8f, ccc4f(.18f, .15f, .34f, 1.f));
-        leftEye->setPosition({-13, 7});
+        leftEye->drawDot({0, 0}, 4.7f, ccc4f(.17f, .14f, .32f, 1.f));
+        leftEye->setPosition({-12, 5});
         portrait->addChild(leftEye, 5);
         auto rightEye = CCDrawNode::create();
-        rightEye->drawDot({0, 0}, 4.8f, ccc4f(.18f, .15f, .34f, 1.f));
-        rightEye->setPosition({13, 7});
+        rightEye->drawDot({0, 0}, 4.7f, ccc4f(.17f, .14f, .32f, 1.f));
+        rightEye->setPosition({12, 5});
         portrait->addChild(rightEye, 5);
-
         if (m_animated) {
             auto blink = [] (CCNode* eye, float delay) {
                 eye->runAction(CCRepeatForever::create(CCSequence::create(
-                    CCDelayTime::create(delay),
-                    CCScaleTo::create(.07f, 1.f, .12f),
-                    CCScaleTo::create(.10f, 1.f, 1.f),
-                    CCDelayTime::create(2.4f), nullptr)));
+                    CCDelayTime::create(delay), CCScaleTo::create(.07f, 1.f, .10f),
+                    CCScaleTo::create(.10f, 1.f, 1.f), CCDelayTime::create(2.5f), nullptr)));
             };
-            blink(leftEye, 1.25f);
-            blink(rightEye, 1.25f);
+            blink(leftEye, 1.15f);
+            blink(rightEye, 1.15f);
         }
 
         auto expression = CCDrawNode::create();
-        expression->drawDot({-22, -8}, 5.4f, ccc4f(1.f, .31f, .62f, .48f));
-        expression->drawDot({22, -8}, 5.4f, ccc4f(1.f, .31f, .62f, .48f));
-        expression->drawSegment({-6, -12}, {0, -15}, 2.f, ccc4f(.48f, .18f, .40f, 1.f));
-        expression->drawSegment({0, -15}, {6, -12}, 2.f, ccc4f(.48f, .18f, .40f, 1.f));
+        expression->drawDot({-21, -8}, 4.8f, ccc4f(1.f, .30f, .63f, .47f));
+        expression->drawDot({21, -8}, 4.8f, ccc4f(1.f, .30f, .63f, .47f));
+        expression->drawSegment({-5, -12}, {0, -15}, 1.8f, ccc4f(.43f, .15f, .36f, 1.f));
+        expression->drawSegment({0, -15}, {5, -12}, 1.8f, ccc4f(.43f, .15f, .36f, 1.f));
         portrait->addChild(expression, 5);
 
         auto crest = CCNode::create();
-        crest->setPosition({0, 45});
+        crest->setPosition({0, 40});
         portrait->addChild(crest, 6);
-        flower(crest, {0, 0}, 17);
+        flower(crest, {0, 0}, 14.f);
         if (m_animated) {
             crest->runAction(CCRepeatForever::create(CCSequence::create(
-                CCRotateBy::create(5.5f, 360.f), nullptr)));
+                CCRotateBy::create(6.f, 360.f), nullptr)));
             portrait->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCMoveBy::create(.82f, {0, 4})),
-                CCEaseSineInOut::create(CCMoveBy::create(.82f, {0, -4})), nullptr)));
-            shell->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCScaleTo::create(1.25f, 1.025f)),
-                CCEaseSineInOut::create(CCScaleTo::create(1.25f, 1.f)), nullptr)));
+                CCEaseSineInOut::create(CCMoveBy::create(.90f, {0, 3.5f})),
+                CCEaseSineInOut::create(CCMoveBy::create(.90f, {0, -3.5f})), nullptr)));
+            body->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCScaleTo::create(1.3f, 1.025f)),
+                CCEaseSineInOut::create(CCScaleTo::create(1.3f, 1.f)), nullptr)));
         }
 
-        // Speech bubble has its own entrance and text gets enough height to wrap.
         auto bubble = CCNode::create();
-        bubble->setPosition({377, 168});
+        bubble->setPosition({430, 216});
         m_modalLayer->addChild(bubble, 31);
-        card(bubble, -129, -62, 258, 125, rgba(25, 28, 58, 255));
+        card(bubble, -90, -47, 180, 94, rgba(26, 27, 59, 255));
         auto tail = CCDrawNode::create();
-        tail->drawSegment({-129, 17}, {-147, 26}, 3, ccc4f(.68f, .61f, .91f, .9f));
+        tail->drawSegment({-90, 7}, {-108, 16}, 2.2f, ccc4f(.72f, .61f, .95f, .92f));
         bubble->addChild(tail, 1);
 
-        text(bubble, "LOK  /  GUIDE ASSISTANT", 0, 51, 220, 17, ccc3(225, 197, 255));
+        text(bubble, "LOK  /  GUIDE", 0, 30, 154, 13,
+             ccc3(225, 197, 255), "bigFont.fnt", .54f);
         static const char* lines[] = {
             "Hi! I'm LOK. Welcome to Flowerist!",
-            "Use the left rail to switch between tabs.",
+            "Use the left rail to switch tabs.",
             "Choose a stage from its own card.",
-            "The console opens only when you request it.",
-            "You're all set. Enjoy the interface!"
+            "The console opens only when requested.",
+            "You're all set. Enjoy Flowerist!"
         };
-        m_guideSpeech = text(bubble, lines[m_guideStep], 0, 5, 220, 48, ccc3(227, 229, 250));
+        m_guideSpeech = text(bubble, lines[m_guideStep], 0, 1, 158, 42,
+                             ccc3(232, 232, 250), "bigFont.fnt", .50f);
         if (m_animated) {
-            bubble->setScale(.90f);
-            bubble->runAction(CCEaseBackOut::create(CCScaleTo::create(.24f, 1.f)));
-            if (m_guideSpeech) {
-                const float speechScale = m_guideSpeech->getScale();
-                m_guideSpeech->setScale(speechScale * .94f);
-                m_guideSpeech->runAction(CCEaseSineOut::create(
-                    CCScaleTo::create(.18f, speechScale)));
-            }
+            bubble->setScale(.92f);
+            bubble->runAction(CCEaseBackOut::create(CCScaleTo::create(.22f, 1.f)));
         }
     }
 
@@ -524,11 +618,11 @@ class FloweristOverlay final : public CCLayer {
             button(m_modalLayer, "YES", 270, 174, 118, 42, 111, false, true, 1);
             button(m_modalLayer, "NO", 440, 174, 118, 42, 112, false, true, 2);
         } else {
-            text(m_modalLayer, "FLOWERIST GUI TOUR", 434, 330, 410, 22, ccc3(226, 198, 255), "goldFont.fnt");
+            text(m_modalLayer, "FLOWERIST GUI TOUR", 355, 330, 360, 22, ccc3(226, 198, 255), "goldFont.fnt", .68f);
             drawLOK();
-            button(m_modalLayer, m_guideStep == 4 ? "FINISH" : "NEXT", 495, 123, 116, 31, 113, false, true, 3);
-            button(m_modalLayer, "CLOSE", 623, 123, 92, 31, 114, false, true);
-            text(m_modalLayer, std::to_string(m_guideStep + 1) + " / 5", 279, 119, 70, 12, ccc3(146, 164, 213));
+            button(m_modalLayer, m_guideStep == 4 ? "FINISH" : "NEXT", 390, 123, 100, 30, 113, false, true, 3);
+            button(m_modalLayer, "CLOSE", 500, 123, 82, 30, 114, false, true);
+            text(m_modalLayer, std::to_string(m_guideStep + 1) + " / 5", 220, 119, 70, 12, ccc3(146, 164, 213));
         }
     }
 
@@ -661,11 +755,12 @@ public:
                 auto& hit = m_hits[i];
                 if (!allowed(hit)) continue;
                 const bool hot = static_cast<int>(i) == hover;
-                if (hit.plate) hit.plate->setColor(hot ? hit.hot : hit.normal);
-                if (hit.glow) {
-                    hit.glow->stopAllActions();
-                    hit.glow->runAction(CCFadeTo::create(m_animated ? .12f : 0.f, hot ? 175 : 0));
+                if (hit.plate) {
+                    const auto color = hot ? hit.hot : hit.normal;
+                    drawPill(hit.plate, hit.width, hit.height,
+                        ccc4f(color.r / 255.f, color.g / 255.f, color.b / 255.f, .98f));
                 }
+                if (hit.glow) hit.glow->setVisible(hot);
             }
         }
     }
@@ -705,4 +800,5 @@ class $modify(FloweristGlobalFrame, CCDirector) {
         CCDirector::drawScene();
     }
 };
+
 
