@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <sstream>
 #include <vector>
 
 using namespace geode::prelude;
@@ -41,11 +42,40 @@ CCLayerColor* rect(CCNode* parent, float x, float y, float w, float h, ccColor4B
 CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
                     float maxW, float maxH, ccColor3B tint = ccc3(225, 226, 246),
                     const char* font = "bigFont.fnt") {
-    auto node = CCLabelBMFont::create(value.c_str(), font);
+    // Long descriptions wrap into readable lines. Short labels (including every
+    // navigation/tab label) remain single-line and keep their existing styling.
+    std::string layout = value;
+    if (maxH >= 22.f && value.find('\n') == std::string::npos) {
+        std::istringstream words(value);
+        std::string word, line, wrapped;
+        const float lineLimit = maxW / .78f;
+        while (words >> word) {
+            const std::string candidate = line.empty() ? word : line + " " + word;
+            auto probe = CCLabelBMFont::create(candidate.c_str(), font);
+            const float width = probe ? probe->getContentSize().width : lineLimit + 1.f;
+            if (!line.empty() && width > lineLimit) {
+                if (!wrapped.empty()) wrapped += "\n";
+                wrapped += line;
+                line = word;
+            } else {
+                line = candidate;
+            }
+        }
+        if (!line.empty()) {
+            if (!wrapped.empty()) wrapped += "\n";
+            wrapped += line;
+        }
+        if (!wrapped.empty()) layout = wrapped;
+    }
+
+    auto node = CCLabelBMFont::create(layout.c_str(), font);
     if (!node) return nullptr;
     const auto size = node->getContentSize();
-    node->setScale(std::min({.78f, maxW / std::max(1.f, size.width), maxH / std::max(1.f, size.height)}));
+    const float fitX = maxW / std::max(1.f, size.width);
+    const float fitY = maxH / std::max(1.f, size.height);
+    node->setScale(std::min({.78f, fitX, fitY}));
     node->setColor(tint);
+    node->setAnchorPoint({.5f, .5f});
     node->setPosition({x, y});
     parent->addChild(node, 20);
     return node;
@@ -53,11 +83,13 @@ CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
 
 void card(CCNode* parent, float x, float y, float w, float h,
           ccColor4B fill = rgba(20, 25, 49, 250)) {
-    // Offset shadow and bevelled inset create a layered, 3D-style surface.
-    rect(parent, x + 3, y - 4, w, h, rgba(3, 5, 17, 220), 1);
-    rect(parent, x, y, w, h, rgba(94, 82, 148), 2);
-    rect(parent, x + 1, y + 1, w - 2, h - 2, fill, 3);
-    rect(parent, x + 5, y + h - 5, w - 10, 1, rgba(150, 139, 205, 125), 4);
+    // Layered panels: shadow, violet rim, deep inset and fine top/side highlights.
+    rect(parent, x + 4, y - 5, w, h, rgba(2, 4, 15, 225), 1);
+    rect(parent, x, y, w, h, rgba(91, 83, 151), 2);
+    rect(parent, x + 1, y + 1, w - 2, h - 2, rgba(12, 16, 37), 3);
+    rect(parent, x + 3, y + 3, w - 6, h - 6, fill, 4);
+    rect(parent, x + 10, y + h - 5, w - 20, 1, rgba(171, 154, 234, 145), 5);
+    rect(parent, x + 5, y + 9, 2, h - 18, rgba(133, 111, 220, 120), 5);
 }
 
 void star(CCNode* parent, float x, float y, float size, unsigned char opacity, float delay) {
@@ -153,8 +185,11 @@ class FloweristOverlay final : public CCLayer {
         auto glow = rect(parent, x - w * .5f - 3, y - h * .5f - 3, w + 6, h + 6, rgba(95, 123, 255, 0), 8);
         auto plate = rect(parent, x - w * .5f, y - h * .5f, w, h,
                           rgba(normal.r, normal.g, normal.b), 9);
-        rect(parent, x - w * .5f + 5, y + h * .5f - 5, w - 10, 1, rgba(205, 207, 255, 90), 10);
-        text(parent, caption, x, y, w - 12, h * .58f, ccc3(247, 242, 255));
+        rect(parent, x - w * .5f + 5, y + h * .5f - 5, w - 10, 1, rgba(205, 207, 255, 115), 10);
+        rect(parent, x - w * .5f + 4, y - h * .5f + 5, 2, h - 10,
+             style == 1 ? rgba(67, 226, 159, 230) :
+             style == 2 ? rgba(245, 91, 119, 230) : rgba(147, 126, 240, 210), 10);
+        text(parent, caption, x + 2, y, w - 18, h * .58f, ccc3(247, 242, 255));
         m_hits.push_back({tag, {x, y}, w, h, parent, plate, glow, normal, hot, page, modal});
     }
 
@@ -213,9 +248,10 @@ class FloweristOverlay final : public CCLayer {
             if (ring) ring->setRotation(-18.f);
         }
 
-        text(m_panel, "FLOWERIST", 91, PANEL_H - 27, 144, 24, ccc3(244, 204, 255), "goldFont.fnt");
-        text(m_panel, "COSMIC INTERFACE", 91, PANEL_H - 48, 139, 12, ccc3(132, 168, 231));
-        text(m_panel, "BUILD 02  /  60 TICK CAP", 91, PANEL_H - 74, 141, 10, ccc3(104, 131, 185));
+        flower(m_panel, {31, PANEL_H - 35}, 10);
+        text(m_panel, "FLOWERIST", 99, PANEL_H - 27, 126, 24, ccc3(244, 204, 255), "goldFont.fnt");
+        text(m_panel, "COSMIC CONTROL CENTER", 99, PANEL_H - 48, 126, 12, ccc3(132, 168, 231));
+        text(m_panel, "BUILD 02  /  60 TICK CAP", 99, PANEL_H - 74, 126, 10, ccc3(104, 131, 185));
 
         for (int i = 0; i < TAB_COUNT; ++i) {
             const float y = PANEL_H - 118.f - i * 42.f;
@@ -230,9 +266,11 @@ class FloweristOverlay final : public CCLayer {
     }
 
     void sectionTitle(const std::string& title, const std::string& subtitle) {
-        text(m_content, title, 430, 394, 450, 27, ccc3(238, 220, 255), "goldFont.fnt");
-        text(m_content, subtitle, 430, 370, 455, 15, ccc3(145, 170, 220));
-        rect(m_content, 196, 354, 470, 1, rgba(97, 107, 159, 170), 4);
+        text(m_content, "FLOWERIST  /  CONTROL CENTER", 224, 414, 300, 10, ccc3(117, 145, 205));
+        text(m_content, title, 430, 390, 450, 27, ccc3(238, 220, 255), "goldFont.fnt");
+        text(m_content, subtitle, 430, 365, 455, 25, ccc3(145, 170, 220));
+        rect(m_content, 196, 346, 470, 1, rgba(97, 107, 159, 170), 4);
+        rect(m_content, 196, 346, 72, 2, rgba(166, 115, 244, 225), 5);
     }
 
     void buildContent() {
@@ -247,124 +285,220 @@ class FloweristOverlay final : public CCLayer {
         sectionTitle(TAB_NAMES[m_selected], TAB_INFO[m_selected]);
 
         if (m_selected == 0) {
-            card(m_content, 199, 105, 468, 225);
-            text(m_content, "SYSTEM TELEMETRY", 226, 299, 210, 19, ccc3(190, 171, 255));
-            text(m_content, "INPUT BUFFER", 237, 255, 150, 14, ccc3(142, 167, 226));
-            text(m_content, "ACTIVE", 622, 255, 70, 14, ccc3(96, 230, 183));
-            text(m_content, "MAXIMUM HORIZON", 237, 217, 170, 14, ccc3(142, 167, 226));
-            text(m_content, "60 TICKS", 622, 217, 95, 14, ccc3(236, 218, 255));
-            text(m_content, "PERFORMANCE PROFILE", 237, 179, 190, 14, ccc3(142, 167, 226));
-            const char* modes[] = {"LOW-END", "BALANCED", "CUSTOM"};
-            text(m_content, modes[m_selectedMode], 622, 179, 105, 14, ccc3(236, 218, 255));
-            rect(m_content, 222, 157, 423, 1, rgba(98, 111, 164, 150), 5);
-            text(m_content, "Console output is optional and opens only when requested.",
-                 237, 135, 405, 13, ccc3(136, 153, 198));
-            button(m_content, s_consoleVisible ? "CLOSE CONSOLE" : "OPEN CONSOLE", 432, 79, 190, 34, 103, true);
+            // Overview: two compact telemetry cards plus a wider action panel.
+            card(m_content, 207, 207, 214, 105, rgba(24, 29, 57, 255));
+            card(m_content, 438, 207, 214, 105, rgba(28, 25, 59, 255));
+            card(m_content, 207, 94, 445, 98, rgba(20, 26, 51, 255));
+
+            text(m_content, "BUFFER ENGINE", 314, 285, 170, 17, ccc3(194, 177, 255));
+            text(m_content, "INPUT PREDICTION", 314, 255, 172, 18, ccc3(145, 168, 224));
+            text(m_content, "ACTIVE", 314, 228, 140, 17, ccc3(96, 230, 183));
+            rect(m_content, 233, 218, 162, 2, rgba(65, 205, 157, 145), 7);
+
+            text(m_content, "LOOKAHEAD CAP", 545, 285, 175, 17, ccc3(194, 177, 255));
+            text(m_content, "60 TICKS", 545, 253, 170, 25, ccc3(236, 218, 255), "goldFont.fnt");
+            text(m_content, "PERFORMANCE LIMIT", 545, 226, 170, 13, ccc3(135, 157, 207));
+
+            text(m_content, "LIVE CONSOLE", 232, 164, 190, 17, ccc3(208, 195, 255));
+            text(m_content, "Console output stays closed until you open it.",
+                 232, 135, 255, 32, ccc3(136, 156, 205));
+            button(m_content, s_consoleVisible ? "CLOSE CONSOLE" : "OPEN CONSOLE",
+                   555, 143, 156, 34, 103, true);
         } else if (m_selected == 1) {
             const char* names[] = {"LOW-END", "BALANCED", "CUSTOM"};
-            const char* detail[] = {"Fewer visual effects", "Recommended default", "Manual profile"};
+            const char* detail[] = {"Prioritizes a lighter interface", "A balanced default profile", "A manually configured profile"};
             for (int i = 0; i < 3; ++i) {
                 const float x = 278.f + i * 151.f;
-                card(m_content, x - 67, 177, 134, 122, i == m_selectedMode ? rgba(39, 34, 74) : rgba(20, 25, 49));
-                text(m_content, names[i], x, 264, 118, 17, i == m_selectedMode ? ccc3(226, 198, 255) : ccc3(169, 184, 224));
-                text(m_content, detail[i], x, 235, 116, 28, ccc3(132, 154, 203));
-                button(m_content, i == m_selectedMode ? "SELECTED" : "SELECT", x, 197, 110, 29,
-                       210 + i, true, false, i == m_selectedMode ? 3 : 0);
+                card(m_content, x - 69, 169, 138, 148,
+                     i == m_selectedMode ? rgba(42, 34, 78, 255) : rgba(20, 26, 51, 255));
+                text(m_content, names[i], x, 279, 124, 18,
+                     i == m_selectedMode ? ccc3(232, 211, 255) : ccc3(177, 188, 226));
+                text(m_content, detail[i], x, 239, 118, 38, ccc3(138, 158, 208));
+                button(m_content, i == m_selectedMode ? "SELECTED" : "SELECT",
+                       x, 192, 112, 31, 210 + i, true, false, i == m_selectedMode ? 3 : 0);
             }
-            text(m_content, "The engine remains capped at 60 ticks in every profile.", 430, 132, 430, 15, ccc3(142, 167, 226));
+            text(m_content, "The engine remains capped at 60 ticks in every profile.",
+                 430, 125, 430, 27, ccc3(142, 167, 226));
         } else if (m_selected == 2) {
-            text(m_content, "Each stage has its own clean, clickable card.", 430, 333, 430, 14, ccc3(142, 167, 226));
+            text(m_content, "Choose a stage profile. Each option has its own settings card.",
+                 430, 326, 430, 26, ccc3(142, 167, 226));
             const char* names[] = {"STAGE 1", "STAGE 2", "STAGE 3", "STAGE 4", "EXTREME", "CUSTOM"};
             const char* detail[] = {"STARTER", "LIGHT", "STANDARD", "ADVANCED", "INTENSE", "PERSONAL"};
+            const ccColor4B fills[] = {
+                rgba(24, 42, 69), rgba(25, 39, 72), rgba(36, 32, 76),
+                rgba(43, 31, 72), rgba(61, 28, 68), rgba(29, 39, 62)
+            };
             for (int i = 0; i < 6; ++i) {
                 const int col = i % 3;
                 const int row = i / 3;
                 const float x = 278.f + col * 150.f;
-                const float y = row == 0 ? 251.f : 151.f;
-                card(m_content, x - 65, y - 34, 130, 78,
-                     i == m_selectedStage ? rgba(42, 36, 79) : rgba(20, 25, 49));
-                text(m_content, names[i], x, y + 10, 118, 16,
-                     i == m_selectedStage ? ccc3(232, 205, 255) : ccc3(174, 187, 225));
-                text(m_content, detail[i], x, y - 8, 110, 11, ccc3(124, 151, 202));
-                button(m_content, i == m_selectedStage ? "ACTIVE" : "CHOOSE", x, y - 27,
-                       106, 23, 200 + i, true, false, i == m_selectedStage ? 3 : 0);
+                const float y = row == 0 ? 244.f : 137.f;
+                card(m_content, x - 67, y - 38, 134, 86,
+                     i == m_selectedStage ? rgba(51, 39, 88, 255) : fills[i]);
+                text(m_content, names[i], x, y + 18, 118, 17,
+                     i == m_selectedStage ? ccc3(238, 214, 255) : ccc3(184, 194, 233));
+                text(m_content, detail[i], x, y - 3, 114, 13, ccc3(135, 161, 218));
+                button(m_content, i == m_selectedStage ? "ACTIVE" : "CHOOSE", x, y - 26,
+                       108, 24, 200 + i, true, false, i == m_selectedStage ? 3 : 0);
             }
         } else if (m_selected == 3) {
-            card(m_content, 202, 205, 223, 113);
-            card(m_content, 438, 205, 223, 113);
-            text(m_content, "INPUT BUFFER", 314, 282, 180, 17, ccc3(211, 195, 255));
-            text(m_content, "Engine system", 314, 255, 175, 13, ccc3(137, 160, 210));
-            text(m_content, "ACTIVE", 314, 225, 120, 16, ccc3(96, 230, 183));
-            text(m_content, "AUTO TUNING", 549, 282, 180, 17, ccc3(211, 195, 255));
-            text(m_content, "Future feature", 549, 255, 175, 13, ccc3(137, 160, 210));
-            text(m_content, "PLANNED", 549, 225, 120, 16, ccc3(238, 190, 122));
-            text(m_content, "Implemented systems are separated from planned tools.", 432, 148, 448, 15, ccc3(142, 167, 226));
+            card(m_content, 202, 194, 223, 132, rgba(23, 31, 57, 255));
+            card(m_content, 438, 194, 223, 132, rgba(34, 27, 62, 255));
+            text(m_content, "INPUT BUFFER", 314, 286, 180, 18, ccc3(216, 199, 255));
+            text(m_content, "Core prediction system", 314, 256, 178, 27, ccc3(145, 166, 215));
+            text(m_content, "ACTIVE", 314, 222, 120, 16, ccc3(96, 230, 183));
+            text(m_content, "LEARN FROM ATTEMPTS", 549, 286, 192, 18, ccc3(216, 199, 255));
+            text(m_content, "Planned for the next phase", 549, 256, 178, 27, ccc3(155, 165, 211));
+            text(m_content, "PLANNED", 549, 222, 120, 16, ccc3(238, 190, 122));
+            text(m_content, "Tuning and learning features will be developed in Phase 3.",
+                 432, 139, 448, 30, ccc3(142, 167, 226));
         } else if (m_selected == 4) {
-            card(m_content, 204, 202, 460, 121);
-            text(m_content, "INTERFACE ANIMATIONS", 232, 286, 240, 17, ccc3(211, 195, 255));
-            text(m_content, m_animated ? "Smooth transitions enabled" : "Reduced motion enabled", 232, 260, 250, 13, ccc3(137, 160, 210));
-            button(m_content, m_animated ? "TURN OFF" : "TURN ON", 585, 269, 112, 31, 102, true);
-            text(m_content, "QUIET STATUS MESSAGES", 232, 224, 240, 17, ccc3(211, 195, 255));
-            text(m_content, m_quiet ? "Enabled" : "Disabled", 232, 204, 140, 12, ccc3(137, 160, 210));
-            button(m_content, m_quiet ? "TURN OFF" : "TURN ON", 585, 211, 112, 31, 101, true);
-            text(m_content, "UI animation settings do not change gameplay tick logic.", 432, 155, 445, 15, ccc3(142, 167, 226));
+            card(m_content, 204, 177, 460, 157, rgba(22, 27, 54, 255));
+            text(m_content, "INTERFACE ANIMATIONS", 235, 294, 245, 18, ccc3(216, 199, 255));
+            text(m_content, m_animated ? "Smooth transitions are enabled" : "Reduced motion is enabled",
+                 235, 266, 255, 26, ccc3(142, 164, 213));
+            button(m_content, m_animated ? "TURN OFF" : "TURN ON", 584, 278, 112, 31, 102, true);
+            rect(m_content, 226, 243, 416, 1, rgba(95, 108, 159, 130), 6);
+            text(m_content, "QUIET STATUS MESSAGES", 235, 220, 245, 18, ccc3(216, 199, 255));
+            text(m_content, m_quiet ? "Status messages are hidden" : "Status messages are visible",
+                 235, 193, 255, 26, ccc3(142, 164, 213));
+            button(m_content, m_quiet ? "TURN OFF" : "TURN ON", 584, 204, 112, 31, 101, true);
         } else {
-            card(m_content, 204, 170, 460, 151);
-            text(m_content, "COMPETITIVE PROFILE", 432, 280, 360, 20, ccc3(213, 195, 255), "goldFont.fnt");
-            text(m_content, "Check your event rules before enabling assistance.", 432, 245, 410, 15, ccc3(155, 172, 216));
-            text(m_content, "This tab is a profile notice, not an anti-cheat bypass.", 432, 215, 410, 15, ccc3(155, 172, 216));
-            text(m_content, "MANUAL PROFILE", 432, 185, 200, 14, ccc3(238, 190, 122));
+            card(m_content, 204, 163, 460, 175, rgba(23, 25, 54, 255));
+            text(m_content, "COMPETITIVE PROFILE", 432, 295, 360, 23, ccc3(221, 202, 255), "goldFont.fnt");
+            text(m_content, "Review the rules of each event before enabling assistance.",
+                 432, 253, 410, 30, ccc3(155, 172, 216));
+            rect(m_content, 231, 226, 402, 1, rgba(95, 108, 159, 130), 6);
+            text(m_content, "This page is a reminder to check event rules, not an anti-cheat bypass.",
+                 432, 203, 410, 32, ccc3(155, 172, 216));
+            text(m_content, "MANUAL PROFILE", 432, 175, 200, 16, ccc3(238, 190, 122));
         }
+
         updateNav();
         if (m_animated) {
-            // CCNode has no opacity API in this Cocos build, so use a tiny
-            // scale-in transition instead of an unsupported fade call.
+            // CCNode has no opacity API in this Cocos build; use a subtle scale-in.
             m_content->setScale(.985f);
-            m_content->runAction(CCEaseSineOut::create(
-                CCScaleTo::create(.18f, 1.f)));
+            m_content->runAction(CCEaseSineOut::create(CCScaleTo::create(.18f, 1.f)));
         }
     }
 
     void drawLOK() {
-        // Created only after the player accepts the guide prompt.
+        // LOK is an original rounded gamepad/cloud mascot with a flower crest.
+        // The Discord-like silhouette is only a visual reference, not a logo copy.
         auto portrait = CCNode::create();
         portrait->setPosition({278, 231});
         m_modalLayer->addChild(portrait, 30);
+
+        auto orbit = CCDrawNode::create();
+        orbit->drawSegment({-57, 0}, {57, 0}, 1.4f, ccc4f(.60f, .61f, 1.f, .44f));
+        orbit->drawSegment({0, -43}, {0, 43}, 1.1f, ccc4f(.60f, .61f, 1.f, .24f));
+        orbit->drawDot({-51, 0}, 3.5f, ccc4f(.63f, .76f, 1.f, .90f));
+        orbit->drawDot({51, 0}, 3.5f, ccc4f(1.f, .55f, .81f, .90f));
+        portrait->addChild(orbit, 0);
+        orbit->runAction(CCRepeatForever::create(CCRotateBy::create(13.f, 360.f)));
+
         auto aura = CCDrawNode::create();
-        aura->drawDot({0, 0}, 69, ccc4f(.45f, .30f, .91f, .17f));
-        aura->drawDot({0, 0}, 55, ccc4f(.68f, .38f, .98f, .16f));
-        portrait->addChild(aura, 0);
-        auto face = CCDrawNode::create();
-        face->drawDot({0, 0}, 42, ccc4f(1.f, .69f, .84f, 1.f));
-        face->drawDot({-29, 4}, 13, ccc4f(1.f, .48f, .72f, .95f));
-        face->drawDot({29, 4}, 13, ccc4f(1.f, .48f, .72f, .95f));
-        face->drawDot({-13, 7}, 4.5f, ccc4f(.20f, .16f, .34f, 1.f));
-        face->drawDot({13, 7}, 4.5f, ccc4f(.20f, .16f, .34f, 1.f));
-        face->drawDot({-21, -9}, 5.5f, ccc4f(1.f, .35f, .60f, .42f));
-        face->drawDot({21, -9}, 5.5f, ccc4f(1.f, .35f, .60f, .42f));
-        face->drawSegment({-6, -12}, {0, -15}, 2, ccc4f(.48f, .19f, .39f, 1.f));
-        face->drawSegment({0, -15}, {6, -12}, 2, ccc4f(.48f, .19f, .39f, 1.f));
-        face->setScaleX(1.10f);
-        portrait->addChild(face, 2);
-        flower(portrait, {0, 48}, 18);
+        aura->drawDot({0, 0}, 69, ccc4f(.45f, .28f, .96f, .18f));
+        aura->drawDot({0, 0}, 55, ccc4f(.72f, .39f, .99f, .14f));
+        portrait->addChild(aura, 1);
         if (m_animated) {
-            portrait->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCMoveBy::create(.75f, {0, 3})),
-                CCEaseSineInOut::create(CCMoveBy::create(.75f, {0, -3})), nullptr)));
+            aura->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCScaleTo::create(1.15f, 1.09f)),
+                CCEaseSineInOut::create(CCScaleTo::create(1.15f, .94f)), nullptr)));
         }
-        card(m_modalLayer, 377, 168, 258, 125, rgba(25, 28, 58, 255));
+
+        auto shadow = CCDrawNode::create();
+        shadow->drawDot({0, -9}, 37, ccc4f(.02f, .03f, .10f, .48f));
+        shadow->setScaleX(1.25f);
+        portrait->addChild(shadow, 2);
+
+        // Soft rounded gamepad body built from overlapping circles and capsules.
+        auto shell = CCDrawNode::create();
+        const auto shellColor = ccc4f(.94f, .56f, .82f, 1.f);
+        const auto shellShade = ccc4f(.78f, .36f, .72f, 1.f);
+        shell->drawSegment({-19, 20}, {19, 20}, 24, shellColor);
+        shell->drawSegment({-27, 7}, {27, 7}, 27, shellColor);
+        shell->drawSegment({-25, -9}, {25, -9}, 22, shellColor);
+        shell->drawDot({-25, 1}, 13.5f, shellColor);
+        shell->drawDot({25, 1}, 13.5f, shellColor);
+        shell->drawDot({0, 4}, 37.5f, shellColor);
+        shell->drawSegment({-19, 25}, {-25, 34}, 7, shellShade);
+        shell->drawSegment({19, 25}, {25, 34}, 7, shellShade);
+        shell->drawSegment({-16, 29}, {12, 29}, 3, ccc4f(1.f, .90f, .98f, .66f));
+        portrait->addChild(shell, 3);
+
+        // Separate eye nodes make blinking smooth and easy to animate.
+        auto leftEye = CCDrawNode::create();
+        leftEye->drawDot({0, 0}, 4.8f, ccc4f(.18f, .15f, .34f, 1.f));
+        leftEye->setPosition({-13, 7});
+        portrait->addChild(leftEye, 5);
+        auto rightEye = CCDrawNode::create();
+        rightEye->drawDot({0, 0}, 4.8f, ccc4f(.18f, .15f, .34f, 1.f));
+        rightEye->setPosition({13, 7});
+        portrait->addChild(rightEye, 5);
+
+        if (m_animated) {
+            auto blink = [] (CCNode* eye, float delay) {
+                eye->runAction(CCRepeatForever::create(CCSequence::create(
+                    CCDelayTime::create(delay),
+                    CCScaleTo::create(.07f, 1.f, .12f),
+                    CCScaleTo::create(.10f, 1.f, 1.f),
+                    CCDelayTime::create(2.4f), nullptr)));
+            };
+            blink(leftEye, 1.25f);
+            blink(rightEye, 1.25f);
+        }
+
+        auto expression = CCDrawNode::create();
+        expression->drawDot({-22, -8}, 5.4f, ccc4f(1.f, .31f, .62f, .48f));
+        expression->drawDot({22, -8}, 5.4f, ccc4f(1.f, .31f, .62f, .48f));
+        expression->drawSegment({-6, -12}, {0, -15}, 2.f, ccc4f(.48f, .18f, .40f, 1.f));
+        expression->drawSegment({0, -15}, {6, -12}, 2.f, ccc4f(.48f, .18f, .40f, 1.f));
+        portrait->addChild(expression, 5);
+
+        auto crest = CCNode::create();
+        crest->setPosition({0, 45});
+        portrait->addChild(crest, 6);
+        flower(crest, {0, 0}, 17);
+        if (m_animated) {
+            crest->runAction(CCRepeatForever::create(CCSequence::create(
+                CCRotateBy::create(5.5f, 360.f), nullptr)));
+            portrait->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCMoveBy::create(.82f, {0, 4})),
+                CCEaseSineInOut::create(CCMoveBy::create(.82f, {0, -4})), nullptr)));
+            shell->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCScaleTo::create(1.25f, 1.025f)),
+                CCEaseSineInOut::create(CCScaleTo::create(1.25f, 1.f)), nullptr)));
+        }
+
+        // Speech bubble has its own entrance and text gets enough height to wrap.
+        auto bubble = CCNode::create();
+        bubble->setPosition({377, 168});
+        m_modalLayer->addChild(bubble, 31);
+        card(bubble, -129, -62, 258, 125, rgba(25, 28, 58, 255));
         auto tail = CCDrawNode::create();
-        tail->drawSegment({377, 215}, {359, 224}, 3, ccc4f(.68f, .61f, .91f, .9f));
-        m_modalLayer->addChild(tail, 31);
-        text(m_modalLayer, "LOK  /  GUIDE ASSISTANT", 505, 270, 222, 13, ccc3(225, 197, 255));
+        tail->drawSegment({-129, 17}, {-147, 26}, 3, ccc4f(.68f, .61f, .91f, .9f));
+        bubble->addChild(tail, 1);
+
+        text(bubble, "LOK  /  GUIDE ASSISTANT", 0, 51, 220, 17, ccc3(225, 197, 255));
         static const char* lines[] = {
             "Hi! I'm LOK. Welcome to Flowerist!",
             "Use the left rail to switch between tabs.",
             "Choose a stage from its own card.",
-            "The LOG tab opens the console only on request.",
+            "The console opens only when you request it.",
             "You're all set. Enjoy the interface!"
         };
-        m_guideSpeech = text(m_modalLayer, lines[m_guideStep], 505, 224, 220, 49, ccc3(227, 229, 250));
+        m_guideSpeech = text(bubble, lines[m_guideStep], 0, 5, 220, 48, ccc3(227, 229, 250));
+        if (m_animated) {
+            bubble->setScale(.90f);
+            bubble->runAction(CCEaseBackOut::create(CCScaleTo::create(.24f, 1.f)));
+            if (m_guideSpeech) {
+                const float speechScale = m_guideSpeech->getScale();
+                m_guideSpeech->setScale(speechScale * .94f);
+                m_guideSpeech->runAction(CCEaseSineOut::create(
+                    CCScaleTo::create(.18f, speechScale)));
+            }
+        }
     }
 
     void closeModal() {
@@ -571,3 +705,4 @@ class $modify(FloweristGlobalFrame, CCDirector) {
         CCDirector::drawScene();
     }
 };
+
