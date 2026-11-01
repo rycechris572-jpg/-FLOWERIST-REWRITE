@@ -23,6 +23,11 @@ $source = $source.Replace("`r`n", "`n")
 
 function Replace-Once {
     param([string]$Text, [string]$Old, [string]$New, [string]$Label)
+    # GitHub Actions checks out this Windows workspace with CRLF line endings.
+    # Normalize the source AND here-string anchors before doing exact matches.
+    $Text = $Text.Replace("`r`n", "`n")
+    $Old = $Old.Replace("`r`n", "`n")
+    $New = $New.Replace("`r`n", "`n")
     $count = ([regex]::Matches($Text, [regex]::Escape($Old))).Count
     if ($count -ne 1) {
         throw "Patch stopped safely at '$Label': expected one source match, found $count. No file was written."
@@ -235,3 +240,4 @@ if ($source.Contains('NEVER touch Ship mode')) { throw 'Old unconditional Ship b
 $source = $source.Replace("`n", $newline)
 [System.IO.File]::WriteAllText($mainPath, $source, [System.Text.UTF8Encoding]::new($false))
 Write-Host 'VIRGO main.cpp engine patch applied successfully.'
+
