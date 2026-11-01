@@ -39,24 +39,40 @@ CCLayerColor* rect(CCNode* parent, float x, float y, float w, float h, ccColor4B
     return node;
 }
 
+std::vector<CCPoint> roundedPoints(float width, float height, float radius, int steps = 8) {
+    std::vector<CCPoint> points;
+    const float r = std::min(radius, std::min(width, height) * .5f);
+    const float halfW = width * .5f;
+    const float halfH = height * .5f;
+    const CCPoint centers[] = {
+        { halfW - r, -halfH + r },
+        { halfW - r,  halfH - r },
+        {-halfW + r,  halfH - r },
+        {-halfW + r, -halfH + r }
+    };
+    const float starts[] = {-90.f, 0.f, 90.f, 180.f};
+    points.reserve(static_cast<size_t>(4 * (steps + 1)));
+    for (int corner = 0; corner < 4; ++corner) {
+        for (int i = 0; i <= steps; ++i) {
+            const float angle = (starts[corner] + 90.f * static_cast<float>(i) / steps)
+                              * 3.1415926535f / 180.f;
+            points.push_back({centers[corner].x + std::cos(angle) * r,
+                              centers[corner].y + std::sin(angle) * r});
+        }
+    }
+    return points;
+}
+
 void roundedRect(CCNode* parent, float x, float y, float w, float h, float radius,
                  ccColor4F color, int z = 0) {
+    // Filled rounded polygon. The old line-only construction left card interiors
+    // transparent, allowing background effects to bleed through as square blocks.
     auto node = CCDrawNode::create();
     if (!node) return;
     node->setPosition({x + w * .5f, y + h * .5f});
-    const float r = std::min(radius, std::min(w, h) * .5f);
-    const float left = -w * .5f + r;
-    const float right = w * .5f - r;
-    const float bottom = -h * .5f + r;
-    const float top = h * .5f - r;
-    node->drawSegment({left, top}, {right, top}, r, color);
-    node->drawSegment({left, bottom}, {right, bottom}, r, color);
-    node->drawSegment({left, bottom}, {left, top}, r, color);
-    node->drawSegment({right, bottom}, {right, top}, r, color);
-    node->drawDot({left, top}, r, color);
-    node->drawDot({right, top}, r, color);
-    node->drawDot({left, bottom}, r, color);
-    node->drawDot({right, bottom}, r, color);
+    auto points = roundedPoints(w, h, radius, 10);
+    node->drawPolygon(points.data(), static_cast<unsigned int>(points.size()),
+                      color, 0.f, ccc4f(0.f, 0.f, 0.f, 0.f));
     parent->addChild(node, z);
 }
 
@@ -165,12 +181,10 @@ void flower(CCNode* parent, CCPoint at, float radius) {
 void drawPill(CCDrawNode* node, float width, float height, ccColor4F color) {
     if (!node) return;
     node->clear();
-    const float r = height * .5f;
-    const float left = -width * .5f + r;
-    const float right = width * .5f - r;
-    node->drawSegment({left, 0}, {right, 0}, r, color);
-    node->drawDot({left, 0}, r, color);
-    node->drawDot({right, 0}, r, color);
+    // Use a filled polygon with a semicircular end-cap, not a stroked rectangle.
+    auto points = roundedPoints(width, height, height * .5f, 16);
+    node->drawPolygon(points.data(), static_cast<unsigned int>(points.size()),
+                      color, 0.f, ccc4f(0.f, 0.f, 0.f, 0.f));
 }
 
 void addWindFlower(CCNode* parent, float x, float y, float scale, float delay, float alpha) {
@@ -381,97 +395,37 @@ class FloweristOverlay final : public CCLayer {
         const float w = win.width;
         const float h = win.height;
 
-        // Deep-space base with layered violet/cyan nebulae. No blocky colour slabs.
-        rect(this, 0, 0, w, h, rgba(4, 7, 20, 255), -20);
+        // The space scene stays outside the control surface. No translucent nebula
+        // blooms or large particles are placed behind the cards or text.
+        rect(this, 0, 0, w, h, rgba(3, 6, 18, 255), -20);
 
-        auto makeNebula = [this](CCPoint at, float size, ccColor4F core, ccColor4F halo,
-                                 float driftX, float driftY, float duration) {
-            auto cloud = CCNode::create();
-            if (!cloud) return;
-            auto glow = CCDrawNode::create();
-            if (!glow) return;
-            glow->drawDot({0, 0}, size, halo);
-            glow->drawDot({-size * .16f, size * .06f}, size * .68f, core);
-            glow->drawDot({size * .19f, -size * .11f}, size * .39f,
-                          ccc4f(core.r, core.g, core.b, core.a * .72f));
-            cloud->addChild(glow);
-            cloud->setPosition(at);
-            addChild(cloud, -16);
-            cloud->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCMoveBy::create(duration, {driftX, driftY})),
-                CCEaseSineInOut::create(CCMoveBy::create(duration, {-driftX, -driftY})), nullptr)));
-            glow->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCScaleTo::create(duration * .72f, 1.08f)),
-                CCEaseSineInOut::create(CCScaleTo::create(duration * .72f, .96f)), nullptr)));
-        };
-        makeNebula({w * .17f, h * .78f}, std::min(w, h) * .28f,
-                   ccc4f(.23f, .15f, .48f, .075f), ccc4f(.18f, .31f, .78f, .045f), 11.f, -5.f, 9.f);
-        makeNebula({w * .78f, h * .72f}, std::min(w, h) * .31f,
-                   ccc4f(.29f, .13f, .48f, .080f), ccc4f(.55f, .18f, .49f, .045f), -13.f, 6.f, 11.f);
-        makeNebula({w * .53f, h * .22f}, std::min(w, h) * .23f,
-                   ccc4f(.08f, .31f, .49f, .055f), ccc4f(.10f, .22f, .62f, .035f), 8.f, 4.f, 10.f);
-
-        // Sparse star field: varied sizes and independent pulse timings create depth.
-        for (int i = 0; i < 112; ++i) {
+        // Restrained star points are visible only in the outer margins once the
+        // opaque VIRGO panel is added above this layer.
+        for (int i = 0; i < 70; ++i) {
             const float x = ((i * 193 + 71) % 997) / 997.f * w;
             const float y = ((i * 127 + 43) % 991) / 991.f * h;
-            const float radius = (i % 17 == 0) ? 2.0f : ((i % 5 == 0) ? 1.25f : .72f);
+            const float radius = (i % 13 == 0) ? 1.5f : ((i % 4 == 0) ? .95f : .58f);
             auto starNode = CCDrawNode::create();
             if (!starNode) continue;
-            const auto tint = (i % 4 == 0) ? ccc4f(.60f, .83f, 1.f, .88f) :
-                              (i % 7 == 0) ? ccc4f(.95f, .69f, 1.f, .86f) :
-                                            ccc4f(.83f, .88f, 1.f, .78f);
+            const auto tint = (i % 5 == 0) ? ccc4f(.56f, .78f, 1.f, .80f)
+                                           : ccc4f(.76f, .84f, 1.f, .64f);
             starNode->drawDot({0, 0}, radius, tint);
-            if (i % 17 == 0) {
-                starNode->drawSegment({-radius * 2.7f, 0}, {radius * 2.7f, 0}, .55f,
-                                      ccc4f(tint.r, tint.g, tint.b, .55f));
-                starNode->drawSegment({0, -radius * 2.7f}, {0, radius * 2.7f}, .55f,
-                                      ccc4f(tint.r, tint.g, tint.b, .55f));
+            if (i % 13 == 0) {
+                starNode->drawSegment({-radius * 2.8f, 0}, {radius * 2.8f, 0}, .45f,
+                                      ccc4f(tint.r, tint.g, tint.b, .45f));
+                starNode->drawSegment({0, -radius * 2.8f}, {0, radius * 2.8f}, .45f,
+                                      ccc4f(tint.r, tint.g, tint.b, .45f));
             }
             starNode->setPosition({x, y});
             addChild(starNode, -10);
             starNode->runAction(CCRepeatForever::create(CCSequence::create(
-                CCDelayTime::create((i % 13) * .11f),
-                CCEaseSineInOut::create(CCScaleTo::create(1.0f + (i % 4) * .25f, 1.35f)),
-                CCEaseSineInOut::create(CCScaleTo::create(1.0f + (i % 4) * .25f, .78f)), nullptr)));
+                CCDelayTime::create((i % 11) * .13f),
+                CCEaseSineInOut::create(CCScaleTo::create(1.2f + (i % 3) * .25f, 1.25f)),
+                CCEaseSineInOut::create(CCScaleTo::create(1.2f + (i % 3) * .25f, .78f)), nullptr)));
         }
 
-        // Distant ringed planet gives the space scene a clear focal point.
-        auto planet = CCDrawNode::create();
-        if (planet) {
-            planet->drawDot({0, 0}, 28.f, ccc4f(.16f, .24f, .53f, .96f));
-            planet->drawDot({-8, 10}, 12.f, ccc4f(.50f, .55f, .94f, .32f));
-            planet->drawDot({8, -9}, 8.f, ccc4f(.05f, .10f, .28f, .44f));
-            planet->setPosition({w * .12f, h * .22f});
-            addChild(planet, -5);
-            auto ring = orbitalRing(this, {w * .12f, h * .22f}, 51.f, 15.f, -4);
-            if (ring) {
-                ring->setRotation(-19.f);
-                ring->runAction(CCRepeatForever::create(CCSequence::create(
-                    CCRotateBy::create(18.f, 5.f), CCRotateBy::create(18.f, -5.f), nullptr)));
-            }
-            planet->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCMoveBy::create(4.8f, {0, 3.f})),
-                CCEaseSineInOut::create(CCMoveBy::create(4.8f, {0, -3.f})), nullptr)));
-        }
-
-        // Small moving light trails. They drift slowly and loop without a hard flash.
-        for (int i = 0; i < 4; ++i) {
-            auto trail = CCDrawNode::create();
-            if (!trail) continue;
-            trail->drawSegment({-28.f, 0}, {0.f, 0}, 1.2f,
-                               i % 2 ? ccc4f(.63f, .79f, 1.f, .50f) : ccc4f(.90f, .70f, 1.f, .48f));
-            trail->setPosition({w * (.22f + .19f * i), h * (.68f + .055f * (i % 3))});
-            trail->setRotation(-17.f);
-            addChild(trail, -8);
-            trail->runAction(CCRepeatForever::create(CCSequence::create(
-                CCDelayTime::create(i * 1.1f),
-                CCEaseSineInOut::create(CCMoveBy::create(3.4f, {34.f, -12.f})),
-                CCEaseSineInOut::create(CCMoveBy::create(3.4f, {-34.f, 12.f})), nullptr)));
-        }
-
-        // A faint zodiac constellation is also visible in the open sky around the panel.
-        drawVirgoConstellation(this, {w * .79f, h * .83f}, .48f, .38f, false);
+        // Put the Virgo constellation in the visible outer sky margin, never behind UI.
+        drawVirgoConstellation(this, {w * .94f, h * .67f}, .18f, .68f, false);
     }
 
     void decorate() {
@@ -491,68 +445,28 @@ class FloweristOverlay final : public CCLayer {
             m_panel->addChild(trim, 5);
         }
 
-        // Right-hand glass surface: a single continuous tone instead of striped slabs.
+        // A fully opaque, continuous content surface. This prevents the external
+        // starfield from bleeding through and keeps every card readable.
         auto field = CCNode::create();
         m_panel->addChild(field, 3);
         const float fieldX = NAV_W + 9.f;
         const float fieldW = PANEL_W - fieldX - 8.f;
         const float fieldY = 8.f;
         const float fieldH = PANEL_H - 16.f;
-        rect(field, fieldX, fieldY, fieldW, fieldH, rgba(8, 12, 30, 218), 0);
+        rect(field, fieldX, fieldY, fieldW, fieldH, rgba(8, 13, 30, 255), 0);
 
-        // Large low-opacity nebula blooms create depth behind the content without obscuring it.
-        auto nebulaOne = CCDrawNode::create();
-        if (nebulaOne) {
-            nebulaOne->drawDot({0, 0}, 116.f, ccc4f(.27f, .23f, .66f, .075f));
-            nebulaOne->drawDot({18, 12}, 72.f, ccc4f(.21f, .54f, .80f, .045f));
-            nebulaOne->setPosition({fieldX + 375.f, 312.f});
-            field->addChild(nebulaOne, 1);
-            nebulaOne->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCScaleTo::create(4.5f, 1.07f)),
-                CCEaseSineInOut::create(CCScaleTo::create(4.5f, .96f)), nullptr)));
-        }
-        auto nebulaTwo = CCDrawNode::create();
-        if (nebulaTwo) {
-            nebulaTwo->drawDot({0, 0}, 94.f, ccc4f(.46f, .18f, .53f, .055f));
-            nebulaTwo->drawDot({-14, 9}, 52.f, ccc4f(.16f, .38f, .73f, .045f));
-            nebulaTwo->setPosition({fieldX + 108.f, 105.f});
-            field->addChild(nebulaTwo, 1);
-            nebulaTwo->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCScaleTo::create(5.2f, 1.06f)),
-                CCEaseSineInOut::create(CCScaleTo::create(5.2f, .95f)), nullptr)));
-        }
-
-        // Fine stars across the panel's open areas; cards sit above them.
-        for (int i = 0; i < 35; ++i) {
+        // Very subtle header pinpoints only; the main content and cards remain clean.
+        for (int i = 0; i < 14; ++i) {
             auto point = CCDrawNode::create();
             if (!point) continue;
-            const float radius = (i % 9 == 0) ? 1.65f : .85f;
-            point->drawDot({0, 0}, radius, (i % 4 == 0)
-                ? ccc4f(.68f, .83f, 1.f, .60f) : ccc4f(.83f, .86f, 1.f, .40f));
-            point->setPosition({fieldX + 18.f + static_cast<float>((i * 79 + 31) % 480),
-                                22.f + static_cast<float>((i * 53 + 17) % 390)});
+            point->drawDot({0, 0}, .55f + (i % 3) * .18f,
+                           ccc4f(.62f, .76f, 1.f, .27f));
+            point->setPosition({fieldX + 18.f + static_cast<float>((i * 67 + 23) % 470),
+                                330.f + static_cast<float>((i * 17) % 45)});
             field->addChild(point, 2);
             point->runAction(CCRepeatForever::create(CCSequence::create(
-                CCDelayTime::create((i % 8) * .16f),
-                CCEaseSineInOut::create(CCScaleTo::create(1.2f, 1.45f)),
-                CCEaseSineInOut::create(CCScaleTo::create(1.2f, .78f)), nullptr)));
-        }
-
-        // The Virgo constellation is a signature element in the open upper-right sky.
-        drawVirgoConstellation(field, {fieldX + fieldW * .80f, 298.f}, .43f, .82f, false);
-
-        // A few slow drifting particles give the header area subtle motion.
-        for (int i = 0; i < 12; ++i) {
-            auto particle = CCDrawNode::create();
-            if (!particle) continue;
-            particle->drawDot({0, 0}, 1.25f + (i % 3) * .28f,
-                              ccc4f(.63f, .83f, 1.f, .55f));
-            particle->setPosition({fieldX + 25.f + static_cast<float>((i * 43) % 440),
-                                   255.f + static_cast<float>((i * 19) % 90)});
-            field->addChild(particle, 3);
-            particle->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCMoveBy::create(3.5f + (i % 3), {8.f, 5.f})),
-                CCEaseSineInOut::create(CCMoveBy::create(3.5f + (i % 3), {-8.f, -5.f})), nullptr)));
+                CCEaseSineInOut::create(CCScaleTo::create(1.7f, 1.35f)),
+                CCEaseSineInOut::create(CCScaleTo::create(1.7f, .8f)), nullptr)));
         }
 
         // Brand lockup: a small astronomical sigil, no flower icon or old project name.
@@ -579,9 +493,9 @@ class FloweristOverlay final : public CCLayer {
         // Spacious, consistently aligned capsule navigation. Tab typography stays large.
         for (int i = 0; i < TAB_COUNT; ++i) {
             const float y = PANEL_H - 120.f - i * 49.f;
-            button(m_panel, TAB_NAMES[i], 91, y, 156, 27, i, false, false, i == m_selected ? 3 : 0);
+            button(m_panel, TAB_NAMES[i], 91, y, 156, 34, i, false, false, i == m_selected ? 3 : 0);
         }
-        button(m_panel, "GUIDE", 91, 33, 156, 27, 110);
+        button(m_panel, "GUIDE", 91, 33, 156, 34, 110);
         text(m_panel, "F2  MENU / CLOSE", 91, 12, 140, 9, ccc3(94, 133, 186), "bigFont.fnt", .40f);
         button(m_panel, "X", PANEL_W - 24, PANEL_H - 25, 34, 30, 100);
         text(m_panel, "ONLINE", PANEL_W - 95, PANEL_H - 28, 68, 12,
@@ -626,9 +540,9 @@ class FloweristOverlay final : public CCLayer {
             text(m_content, "60 TICKS", 545, 253, 170, 25, ccc3(236, 218, 255), "goldFont.fnt");
             text(m_content, "PERFORMANCE LIMIT", 545, 226, 170, 13, ccc3(135, 157, 207));
 
-            text(m_content, "LIVE CONSOLE", 232, 164, 190, 17, ccc3(208, 195, 255));
+            text(m_content, "LIVE CONSOLE", 294, 164, 176, 17, ccc3(208, 195, 255));
             text(m_content, "Open the log console when needed.",
-                 232, 135, 255, 24, ccc3(136, 156, 205), "bigFont.fnt", .42f);
+                 294, 135, 176, 24, ccc3(136, 156, 205), "bigFont.fnt", .40f);
             button(m_content, s_consoleVisible ? "CLOSE CONSOLE" : "OPEN CONSOLE",
                    555, 143, 164, 32, 103, true);
         } else if (m_selected == 1) {
