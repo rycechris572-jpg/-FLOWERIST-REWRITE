@@ -41,14 +41,14 @@ CCLayerColor* rect(CCNode* parent, float x, float y, float w, float h, ccColor4B
 
 CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
                     float maxW, float maxH, ccColor3B tint = ccc3(225, 226, 246),
-                    const char* font = "bigFont.fnt", float maxScale = .62f) {
+                    const char* font = "bigFont.fnt", float maxScale = .54f) {
     // Long descriptions wrap into readable lines. Short labels (including every
     // navigation/tab label) remain single-line and keep their existing styling.
     std::string layout = value;
     if (maxH >= 22.f && value.find('\n') == std::string::npos) {
         std::istringstream words(value);
         std::string word, line, wrapped;
-        const float lineLimit = maxW / .78f;
+        const float lineLimit = maxW / std::max(.1f, maxScale);
         while (words >> word) {
             const std::string candidate = line.empty() ? word : line + " " + word;
             auto probe = CCLabelBMFont::create(candidate.c_str(), font);
@@ -145,6 +145,8 @@ void addWindFlower(CCNode* parent, float x, float y, float scale, float delay, f
     auto plant = CCNode::create();
     if (!plant) return;
     plant->setPosition({x, y});
+    plant->setAnchorPoint({0.f, 0.f});
+    plant->setContentSize({1.f, 1.f});
     const float h = 68.f * scale;
     auto art = CCDrawNode::create();
     if (!art) return;
@@ -170,9 +172,9 @@ void addWindFlower(CCNode* parent, float x, float y, float scale, float delay, f
     // Alternating gusts make nearby flower heads sway like a field in a light breeze.
     plant->runAction(CCRepeatForever::create(CCSequence::create(
         CCDelayTime::create(delay),
-        CCEaseSineInOut::create(CCRotateTo::create(1.15f, 5.8f)),
-        CCEaseSineInOut::create(CCRotateTo::create(2.25f, -5.8f)),
-        CCEaseSineInOut::create(CCRotateTo::create(1.15f, 0.f)), nullptr)));
+        CCEaseSineInOut::create(CCRotateTo::create(1.35f, 4.2f)),
+        CCEaseSineInOut::create(CCRotateTo::create(2.55f, -5.2f)),
+        CCEaseSineInOut::create(CCRotateTo::create(1.45f, 0.f)), nullptr)));
 }
 }
 
@@ -269,21 +271,84 @@ class FloweristOverlay final : public CCLayer {
     }
 
     void drawBackdrop() {
-        auto win = CCDirector::sharedDirector()->getWinSize();
-        rect(this, 0, 0, win.width, win.height, rgba(5, 7, 22, 210), -5);
-        for (int i = 0; i < 42; ++i) {
+        const auto win = CCDirector::sharedDirector()->getWinSize();
+
+        // Deep dusk background. Avoid giant drawDot glows here: those can look
+        // like hard-edged colour blocks on some Geometry Dash/Cocos builds.
+        rect(this, 0, 0, win.width, win.height, rgba(8, 10, 27, 244), -5);
+
+        auto aurora = CCDrawNode::create();
+        if (aurora) {
+            aurora->drawSegment({-20, win.height * .28f},
+                {win.width * .48f, win.height * .34f}, 24.f,
+                ccc4f(.57f, .23f, .57f, .075f));
+            aurora->drawSegment({win.width * .45f, win.height * .20f},
+                {win.width + 20, win.height * .25f}, 18.f,
+                ccc4f(.24f, .30f, .68f, .065f));
+            aurora->drawSegment({win.width * .10f, win.height * .70f},
+                {win.width * .86f, win.height * .76f}, 10.f,
+                ccc4f(.48f, .25f, .62f, .045f));
+            addChild(aurora, -4);
+        }
+
+        for (int i = 0; i < 54; ++i) {
             const float x = ((i * 137 + 43) % 997) / 997.f * win.width;
             const float y = ((i * 83 + 19) % 983) / 983.f * win.height;
-            star(this, x, y, i % 4 == 0 ? 1.6f : 1.f,
-                 static_cast<unsigned char>(90 + (i % 5) * 25), (i % 9) * .11f);
+            star(this, x, y, i % 7 == 0 ? 1.65f : .9f,
+                 static_cast<unsigned char>(70 + (i % 5) * 27), (i % 11) * .13f);
         }
-        auto nebula = CCDrawNode::create();
-        if (nebula) {
-            nebula->drawDot({win.width * .82f, win.height * .78f}, std::min(win.width, win.height) * .19f,
-                             ccc4f(.35f, .21f, .66f, .10f));
-            nebula->drawDot({win.width * .18f, win.height * .20f}, std::min(win.width, win.height) * .14f,
-                             ccc4f(.16f, .52f, .78f, .08f));
-            addChild(nebula, -4);
+
+        // A layered flower meadow frames the GUI from behind. The panel sits
+        // above it, while the lower edge and side margins remain visibly alive.
+        auto meadow = CCNode::create();
+        addChild(meadow, 3);
+        auto hills = CCDrawNode::create();
+        if (hills) {
+            hills->drawSegment({-20, 10}, {win.width * .50f, 22}, 26.f,
+                               ccc4f(.13f, .29f, .39f, .24f));
+            hills->drawSegment({win.width * .42f, 4}, {win.width + 20, 17}, 34.f,
+                               ccc4f(.20f, .25f, .42f, .20f));
+            hills->drawSegment({-20, 0}, {win.width + 20, 5}, 8.f,
+                               ccc4f(.28f, .49f, .44f, .28f));
+            meadow->addChild(hills, 0);
+        }
+
+        const float bottomX[] = {18, 62, 110, 162, 214, 270, 324, 382, 440,
+                                 500, 560, 620, 680, 740, 800, 860, 920, 980,
+                                 1040, 1100, 1160, 1220, 1280, 1340};
+        for (int i = 0; i < 24; ++i) {
+            const float x = bottomX[i] * win.width / 1366.f;
+            const float y = 3.f + (i % 4) * 5.f;
+            const float sizes[] = {.52f, .70f, .44f, .82f, .61f, .47f};
+            addWindFlower(meadow, x, y, sizes[i % 6], (i % 7) * .17f,
+                          .42f + (i % 3) * .08f);
+        }
+
+        // Taller flowers on the uncovered side margins add depth without
+        // putting busy decorations over the central text and cards.
+        addWindFlower(meadow, 24.f, 74.f, .95f, .20f, .62f);
+        addWindFlower(meadow, 58.f, 132.f, .72f, .56f, .48f);
+        addWindFlower(meadow, 92.f, 42.f, .64f, .34f, .52f);
+        addWindFlower(meadow, win.width - 24.f, 83.f, .98f, .43f, .62f);
+        addWindFlower(meadow, win.width - 60.f, 145.f, .70f, .14f, .46f);
+        addWindFlower(meadow, win.width - 98.f, 38.f, .66f, .62f, .52f);
+
+        // Loose petals drift sideways in staggered gusts.
+        for (int i = 0; i < 18; ++i) {
+            auto petal = CCDrawNode::create();
+            if (!petal) continue;
+            const float radius = 1.5f + (i % 4) * .38f;
+            petal->drawDot({0, 0}, radius,
+                (i % 2) ? ccc4f(1.f, .55f, .80f, .62f)
+                        : ccc4f(1.f, .78f, .91f, .56f));
+            const float x = (i * 73.f + 35.f) / 18.f;
+            const float y = win.height * (.20f + (i % 6) * .105f);
+            petal->setPosition({x, y});
+            meadow->addChild(petal, 4);
+            petal->runAction(CCRepeatForever::create(CCSequence::create(
+                CCDelayTime::create((i % 8) * .16f),
+                CCEaseSineInOut::create(CCMoveBy::create(3.2f, {18.f, 5.f})),
+                CCEaseSineInOut::create(CCMoveBy::create(3.2f, {-18.f, -5.f})), nullptr)));
         }
     }
 
@@ -298,12 +363,15 @@ class FloweristOverlay final : public CCLayer {
         // underneath all cards so the text and controls remain easy to read.
         auto field = CCNode::create();
         m_panel->addChild(field, 3);
-        auto glowClouds = CCDrawNode::create();
-        if (glowClouds) {
-            glowClouds->drawDot({426, 73}, 170, ccc4f(.66f, .22f, .56f, .12f));
-            glowClouds->drawDot({603, 134}, 122, ccc4f(.31f, .29f, .76f, .10f));
-            glowClouds->drawDot({248, 324}, 98, ccc4f(.72f, .28f, .57f, .08f));
-            field->addChild(glowClouds, 0);
+        auto softRibbons = CCDrawNode::create();
+        if (softRibbons) {
+            softRibbons->drawSegment({185, 74}, {690, 96}, 12.f,
+                ccc4f(.65f, .28f, .66f, .075f));
+            softRibbons->drawSegment({205, 286}, {665, 306}, 7.f,
+                ccc4f(.31f, .39f, .75f, .055f));
+            softRibbons->drawSegment({245, 178}, {640, 168}, 5.f,
+                ccc4f(.83f, .43f, .72f, .04f));
+            field->addChild(softRibbons, 0);
         }
         auto hills = CCDrawNode::create();
         if (hills) {
@@ -356,26 +424,31 @@ class FloweristOverlay final : public CCLayer {
         }
 
         flower(m_panel, {31, PANEL_H - 35}, 10);
-        text(m_panel, "FLOWERIST", 99, PANEL_H - 27, 126, 24, ccc3(244, 204, 255), "goldFont.fnt");
-        text(m_panel, "COSMIC CONTROL CENTER", 99, PANEL_H - 48, 126, 12, ccc3(132, 168, 231));
-        text(m_panel, "BUILD 02  /  60 TICK CAP", 99, PANEL_H - 74, 126, 10, ccc3(104, 131, 185));
+        text(m_panel, "FLOWERIST", 99, PANEL_H - 27, 126, 24,
+             ccc3(244, 204, 255), "goldFont.fnt", .76f);
+        text(m_panel, "COSMIC CONTROL CENTER", 99, PANEL_H - 49, 126, 11,
+             ccc3(132, 168, 231), "bigFont.fnt", .48f);
+        text(m_panel, "BUILD 02  /  60 TICK CAP", 99, PANEL_H - 72, 126, 9,
+             ccc3(104, 131, 185), "bigFont.fnt", .44f);
 
         for (int i = 0; i < TAB_COUNT; ++i) {
-            const float y = PANEL_H - 124.f - i * 47.f;
-            button(m_panel, TAB_NAMES[i], 91, y, 148, 31, i, false, false, i == m_selected ? 3 : 0);
+            const float y = PANEL_H - 122.f - i * 48.f;
+            button(m_panel, TAB_NAMES[i], 91, y, 154, 30, i, false, false, i == m_selected ? 3 : 0);
         }
-        button(m_panel, "GUI GUIDE", 91, 35, 150, 30, 110);
+        button(m_panel, "GUI GUIDE", 91, 34, 154, 29, 110);
         text(m_panel, "F2  MENU  /  CLOSE", 91, 12, 140, 9, ccc3(94, 119, 170));
         button(m_panel, "X", PANEL_W - 24, PANEL_H - 25, 34, 30, 100);
-        text(m_panel, "FLOWERIST  //  SPACE SYSTEMS", 224, PANEL_H - 28, 380, 13, ccc3(117, 143, 204));
         text(m_panel, "ONLINE", PANEL_W - 95, PANEL_H - 28, 68, 12, ccc3(96, 230, 183));
         updateNav();
     }
 
     void sectionTitle(const std::string& title, const std::string& subtitle) {
-        text(m_content, "FLOWERIST  /  CONTROL CENTER", 224, 414, 300, 10, ccc3(117, 145, 205));
-        text(m_content, title, 430, 390, 450, 27, ccc3(238, 220, 255), "goldFont.fnt");
-        text(m_content, subtitle, 430, 365, 455, 25, ccc3(145, 170, 220));
+        text(m_content, "CONTROL CENTER", 430, 414, 450, 10,
+             ccc3(117, 145, 205), "bigFont.fnt", .48f);
+        text(m_content, title, 430, 390, 450, 27,
+             ccc3(238, 220, 255), "goldFont.fnt", .76f);
+        text(m_content, subtitle, 430, 365, 455, 21,
+             ccc3(145, 170, 220), "bigFont.fnt", .52f);
         rect(m_content, 196, 346, 470, 1, rgba(97, 107, 159, 170), 4);
         rect(m_content, 196, 346, 72, 2, rgba(166, 115, 244, 225), 5);
     }
@@ -407,8 +480,8 @@ class FloweristOverlay final : public CCLayer {
             text(m_content, "PERFORMANCE LIMIT", 545, 226, 170, 13, ccc3(135, 157, 207));
 
             text(m_content, "LIVE CONSOLE", 232, 164, 190, 17, ccc3(208, 195, 255));
-            text(m_content, "Console output stays closed until you open it.",
-                 232, 135, 255, 32, ccc3(136, 156, 205));
+            text(m_content, "Open the log console when needed.",
+                 232, 135, 255, 24, ccc3(136, 156, 205), "bigFont.fnt", .50f);
             button(m_content, s_consoleVisible ? "CLOSE CONSOLE" : "OPEN CONSOLE",
                    555, 143, 156, 34, 103, true);
         } else if (m_selected == 1) {
@@ -490,10 +563,10 @@ class FloweristOverlay final : public CCLayer {
     }
 
     void drawLOK() {
-        // LOK: a rounded controller-inspired mascot with a pink flower crest.
-        // Keep the character on the left and a compact speech bubble on the right.
+        // LOK is the custom Flowerist guide mascot. Keep the character prominent
+        // on the left and use a compact speech capsule that never covers her.
         auto portrait = CCNode::create();
-        portrait->setPosition({250, 218});
+        portrait->setPosition({238, 218});
         m_modalLayer->addChild(portrait, 30);
 
         auto orbit = CCDrawNode::create();
@@ -505,15 +578,15 @@ class FloweristOverlay final : public CCLayer {
         if (m_animated) orbit->runAction(CCRepeatForever::create(CCRotateBy::create(15.f, 360.f)));
 
         auto aura = CCDrawNode::create();
-        aura->drawDot({0, 0}, 55, ccc4f(.61f, .31f, .94f, .17f));
-        aura->drawDot({0, 0}, 43, ccc4f(.95f, .40f, .77f, .12f));
+        aura->drawDot({0, 0}, 54, ccc4f(.61f, .31f, .94f, .13f));
+        aura->drawDot({0, 0}, 42, ccc4f(.95f, .40f, .77f, .10f));
         portrait->addChild(aura, 1);
         if (m_animated) aura->runAction(CCRepeatForever::create(CCSequence::create(
-            CCEaseSineInOut::create(CCScaleTo::create(1.2f, 1.08f)),
-            CCEaseSineInOut::create(CCScaleTo::create(1.2f, .94f)), nullptr)));
+            CCEaseSineInOut::create(CCScaleTo::create(1.2f, 1.07f)),
+            CCEaseSineInOut::create(CCScaleTo::create(1.2f, .95f)), nullptr)));
 
         auto shadow = CCDrawNode::create();
-        shadow->drawDot({0, -25}, 28, ccc4f(.02f, .02f, .09f, .40f));
+        shadow->drawDot({0, -25}, 28, ccc4f(.02f, .02f, .09f, .38f));
         portrait->addChild(shadow, 2);
 
         auto body = CCDrawNode::create();
@@ -570,27 +643,38 @@ class FloweristOverlay final : public CCLayer {
                 CCEaseSineInOut::create(CCScaleTo::create(1.3f, 1.f)), nullptr)));
         }
 
+        // A compact oval speech bubble leaves a clear gap between the text and LOK.
         auto bubble = CCNode::create();
-        bubble->setPosition({430, 216});
+        bubble->setPosition({444, 207});
         m_modalLayer->addChild(bubble, 31);
-        card(bubble, -90, -47, 180, 94, rgba(26, 27, 59, 255));
+        auto bubbleShape = CCDrawNode::create();
+        bubbleShape->setPosition({0, 0});
+        drawPill(bubbleShape, 174.f, 86.f, ccc4f(.10f, .12f, .25f, .98f));
+        bubble->addChild(bubbleShape, 0);
+        auto bubbleRim = CCDrawNode::create();
+        drawPill(bubbleRim, 178.f, 90.f, ccc4f(.64f, .51f, .91f, .80f));
+        // Dark inner capsule sits over the thin violet outline.
+        auto inner = CCDrawNode::create();
+        drawPill(inner, 172.f, 84.f, ccc4f(.10f, .12f, .25f, .99f));
+        bubble->addChild(bubbleRim, -1);
+        bubble->addChild(inner, 0);
         auto tail = CCDrawNode::create();
-        tail->drawSegment({-90, 7}, {-108, 16}, 2.2f, ccc4f(.72f, .61f, .95f, .92f));
+        tail->drawSegment({-84, 4}, {-101, 13}, 2.2f, ccc4f(.72f, .61f, .95f, .92f));
         bubble->addChild(tail, 1);
 
-        text(bubble, "LOK  /  GUIDE", 0, 30, 154, 13,
-             ccc3(225, 197, 255), "bigFont.fnt", .54f);
+        text(bubble, "LOK  /  GUIDE", 0, 22, 146, 12,
+             ccc3(225, 197, 255), "bigFont.fnt", .48f);
         static const char* lines[] = {
-            "Hi! I'm LOK. Welcome to Flowerist!",
+            "Hi! I'm LOK. Welcome!",
             "Use the left rail to switch tabs.",
-            "Choose a stage from its own card.",
-            "The console opens only when requested.",
+            "Choose a stage card to begin.",
+            "The console opens only on request.",
             "You're all set. Enjoy Flowerist!"
         };
-        m_guideSpeech = text(bubble, lines[m_guideStep], 0, 1, 158, 42,
-                             ccc3(232, 232, 250), "bigFont.fnt", .50f);
+        m_guideSpeech = text(bubble, lines[m_guideStep], 0, -7, 146, 34,
+                             ccc3(232, 232, 250), "bigFont.fnt", .46f);
         if (m_animated) {
-            bubble->setScale(.92f);
+            bubble->setScale(.90f);
             bubble->runAction(CCEaseBackOut::create(CCScaleTo::create(.22f, 1.f)));
         }
     }
@@ -610,19 +694,20 @@ class FloweristOverlay final : public CCLayer {
         m_modalLayer = CCNode::create();
         m_panel->addChild(m_modalLayer, 80);
         rect(m_modalLayer, 0, 0, PANEL_W, PANEL_H, rgba(5, 7, 22, 220), 0);
-        card(m_modalLayer, 163, 90, 385, 270, rgba(22, 22, 52, 255));
+        card(m_modalLayer, 128, 82, 448, 284, rgba(22, 22, 52, 255));
         if (m_modal == 1) {
-            text(m_modalLayer, "QUICK HELP", 355, 317, 300, 22, ccc3(226, 198, 255), "goldFont.fnt");
-            text(m_modalLayer, "Do you want a guide about the GUI?", 355, 267, 330, 20, ccc3(237, 237, 255));
-            text(m_modalLayer, "LOK appears only if you choose YES.", 355, 231, 320, 14, ccc3(151, 170, 218));
-            button(m_modalLayer, "YES", 270, 174, 118, 42, 111, false, true, 1);
-            button(m_modalLayer, "NO", 440, 174, 118, 42, 112, false, true, 2);
+            text(m_modalLayer, "QUICK HELP", 352, 318, 300, 22, ccc3(226, 198, 255), "goldFont.fnt", .68f);
+            text(m_modalLayer, "Do you want a guide about the GUI?", 352, 267, 330, 20, ccc3(237, 237, 255), "bigFont.fnt", .54f);
+            text(m_modalLayer, "LOK appears only if you choose YES.", 352, 231, 320, 14, ccc3(151, 170, 218), "bigFont.fnt", .48f);
+            button(m_modalLayer, "YES", 268, 174, 118, 38, 111, false, true, 1);
+            button(m_modalLayer, "NO", 436, 174, 118, 38, 112, false, true, 2);
         } else {
-            text(m_modalLayer, "FLOWERIST GUI TOUR", 355, 330, 360, 22, ccc3(226, 198, 255), "goldFont.fnt", .68f);
+            text(m_modalLayer, "FLOWERIST GUI TOUR", 352, 338, 360, 22,
+                 ccc3(226, 198, 255), "goldFont.fnt", .68f);
             drawLOK();
-            button(m_modalLayer, m_guideStep == 4 ? "FINISH" : "NEXT", 390, 123, 100, 30, 113, false, true, 3);
-            button(m_modalLayer, "CLOSE", 500, 123, 82, 30, 114, false, true);
-            text(m_modalLayer, std::to_string(m_guideStep + 1) + " / 5", 220, 119, 70, 12, ccc3(146, 164, 213));
+            button(m_modalLayer, m_guideStep == 4 ? "FINISH" : "NEXT", 414, 112, 104, 29, 113, false, true, 3);
+            button(m_modalLayer, "CLOSE", 532, 112, 82, 29, 114, false, true);
+            text(m_modalLayer, std::to_string(m_guideStep + 1) + " / 5", 230, 112, 70, 12, ccc3(146, 164, 213));
         }
     }
 
