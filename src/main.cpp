@@ -10,8 +10,36 @@
 #include <cstdio>
 #include <algorithm>
 #include <cstdint>
+#include "VirgoShared.hpp"
 
 using namespace geode::prelude;
+
+// VIRGO MODE ENGINE PATCH v1
+static int virgoModeIndex(PlayerObject* player) {
+    if (!player) return virgo::Cube;
+    if (player->m_isDart) return virgo::Wave;
+    if (player->m_isShip) return virgo::Ship;
+    if (player->m_isBall) return virgo::Ball;
+    if (player->m_isBird) return virgo::UFO;
+    if (player->m_isRobot) return virgo::Robot;
+    if (player->m_isSpider) return virgo::Spider;
+    if (player->m_isSwing) return virgo::Swing;
+    return virgo::Cube;
+}
+
+static bool virgoModeIsEnabled(PlayerObject* player) {
+    return player && virgo::modeEnabled[virgoModeIndex(player)];
+}
+
+static int virgoFrameLimitFor(PlayerObject* player, int fallback) {
+    if (!player) return fallback;
+    switch (virgoModeIndex(player)) {
+        case virgo::Cube: return virgo::modeFrames[virgo::Cube];
+        case virgo::Wave: return virgo::modeFrames[virgo::Wave];
+        case virgo::Ship: return virgo::modeFrames[virgo::Ship];
+        default: return fallback;
+    }
+}
 
 // ============================================================================
 //  USER SETTINGS
@@ -111,6 +139,8 @@ public:
 
         m_simPlayer1 = createTrajectoryPlayer();
         m_simPlayer2 = createTrajectoryPlayer();
+        m_maxTicksNormal = std::clamp(virgo::modeFrames[virgo::Cube], 0, MAX_BUFFER_TICKS);
+        m_maxTicksWave = std::clamp(virgo::modeFrames[virgo::Wave], 0, MAX_BUFFER_TICKS);
         m_waitTicks = -1;
         m_queuedOpposite = false;
         m_physicalHolding = false;
@@ -151,6 +181,9 @@ public:
         m_enabled = m_presetIndex != 9;
         m_maxTicksNormal = normalTicks[m_presetIndex];
         m_maxTicksWave = waveTicks[m_presetIndex];
+        virgo::modeFrames[virgo::Cube] = m_maxTicksNormal;
+        virgo::modeFrames[virgo::Wave] = m_maxTicksWave;
+        virgo::modeFrames[virgo::Ship] = m_maxTicksNormal;
 
         if (m_enabled) {
             printf("[InputBuffer] F6 Cycle -> STAGE %d: %d Ticks All | %d Ticks Wave\n",
@@ -160,8 +193,8 @@ public:
         }
     }
 
-    int normalTicks() const { return m_maxTicksNormal; }
-    int waveTicks() const { return m_maxTicksWave; }
+    int normalTicks() const { return virgo::modeFrames[virgo::Cube]; }
+    int waveTicks() const { return virgo::modeFrames[virgo::Wave]; }
     bool enabled() const { return m_enabled; }
     bool isSimulating() const { return m_simulating; }
     bool isFiringBuffered() const { return m_firingBuffered; }
@@ -171,6 +204,8 @@ public:
             m_simulationDead = true;
             return true;
         }
+        // Record real deaths per gamemode for future VIRGO learning telemetry.
+        if (player) ++virgo::deathsByMode[virgoModeIndex(player)];
         // Real player died -> clear any pending buffer so respawn is 100% clean
         m_waitTicks = -1;
         m_queuedOpposite = false;
@@ -216,8 +251,8 @@ public:
 
         float dt = getValidDt();
         int survived = 0;
-        bool isContinuousMode = realP1->m_isDart || realP1->m_isBird || realP1->m_isSwing ||
-                                (isDual && realP2 && (realP2->m_isDart || realP2->m_isBird || realP2->m_isSwing));
+        bool isContinuousMode = realP1->m_isDart || realP1->m_isBird || realP1->m_isSwing || realP1->m_isShip ||
+                                (isDual && realP2 && (realP2->m_isDart || realP2->m_isBird || realP2->m_isSwing || realP2->m_isShip));
         int airborneTicks = 0;
         int safeLandedTicks = 0;
 
@@ -309,8 +344,8 @@ public:
             return true;
         }
 
-        // 1. NEVER touch Ship mode (or Dual with Ship)
-        if (p1->m_isShip || (isDual && p2 && p2->m_isShip)) {
+        // A disabled gamemode always receives raw input without predictive buffering.
+        if (!virgoModeIsEnabled(p1) || (isDual && p2 && !virgoModeIsEnabled(p2))) {
             m_waitTicks = -1;
             m_queuedOpposite = false;
             m_gameHolding = push;
@@ -359,8 +394,8 @@ public:
         }
 
         // Only Wave (m_isDart) and Robot (m_isRobot) change trajectory on RELEASE
-        bool releaseAffectsPhysics = p1->m_isDart || p1->m_isRobot ||
-                                     (isDual && p2 && (p2->m_isDart || p2->m_isRobot));
+        bool releaseAffectsPhysics = p1->m_isDart || p1->m_isRobot || p1->m_isShip ||
+                                     (isDual && p2 && (p2->m_isDart || p2->m_isRobot || p2->m_isShip));
         if (!push && !releaseAffectsPhysics) {
             m_gameHolding = false;
             return true;
@@ -372,7 +407,14 @@ public:
         // Full Show-Trajectory lookahead for Wave (65 ticks / 50 ticks Mini Wave)
         // so it sees spikes and sawblades 1-3 blocks ahead along the diagonal path!
         int targetHorizon = isMiniWave ? 50 : (isWave ? 65 : 160);
-        int maxDelayFrames = std::clamp(isWave ? m_maxTicksWave : m_maxTicksNormal, 0, MAX_BUFFER_TICKS);
+        int modeLimit = virgoFrameLimitFor(p1, m_maxTicksNormal);
+        if (isDual && p2) {
+            modeLimit = std::min(modeLimit, virgoFrameLimitFor(p2, m_maxTicksNormal));
+        }
+        int maxDelayFrames = std::clamp(modeLimit, 0, MAX_BUFFER_TICKS);
+
+        const int telemetryMode = virgoModeIndex(p1);
+        ++virgo::predictionsByMode[telemetryMode];
 
         // 4. Check Frame 0 (immediate input) across the full trajectory horizon
         int ticksFrame0 = getSurvivalTicks(pl, p1, p2, isDual, 0, push, targetHorizon);
@@ -430,6 +472,7 @@ public:
         }
 
         if (bestDelay > 0) {
+            ++virgo::safeDelaysByMode[telemetryMode];
             // Throttle expensive console writes under repeated fast inputs.
             const auto now = static_cast<unsigned long long>(GetTickCount64());
             if (!m_lastConsolePrintMs || now - m_lastConsolePrintMs >= CONSOLE_LOG_INTERVAL_MS) {
@@ -465,7 +508,8 @@ public:
             m_ticksSinceLastInput++;
         }
 
-        if (player->m_isShip || (pl->m_gameState.m_isDualMode && pl->m_player2 && pl->m_player2->m_isShip)) {
+        const bool dualMode = pl->m_gameState.m_isDualMode && pl->m_player2;
+        if (!virgoModeIsEnabled(player) || (dualMode && !virgoModeIsEnabled(pl->m_player2))) {
             m_waitTicks = -1;
             m_queuedOpposite = false;
             if (m_gameHolding != m_physicalHolding) {
