@@ -1,4 +1,4 @@
-// Flowerist Rewrite - Cosmic Dashboard UI
+// VIRGO - Premium Cosmic Dashboard UI
 // Built with Cocos2d/Geode primitives; no external image assets required.
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCDirector.hpp>
@@ -22,7 +22,7 @@ bool s_consoleVisible = false;
 const char* TAB_NAMES[TAB_COUNT] = {"OVERVIEW", "MODES", "STAGES", "ASSISTS", "SETTINGS", "COMPETITIVE"};
 const char* TAB_INFO[TAB_COUNT] = {
     "System status and recent activity",
-    "Choose how Flowerist handles its workload",
+    "Choose how VIRGO handles its workload",
     "Select a stage profile",
     "See the active assistance systems",
     "Tune the interface and performance",
@@ -39,9 +39,30 @@ CCLayerColor* rect(CCNode* parent, float x, float y, float w, float h, ccColor4B
     return node;
 }
 
+void roundedRect(CCNode* parent, float x, float y, float w, float h, float radius,
+                 ccColor4F color, int z = 0) {
+    auto node = CCDrawNode::create();
+    if (!node) return;
+    node->setPosition({x + w * .5f, y + h * .5f});
+    const float r = std::min(radius, std::min(w, h) * .5f);
+    const float left = -w * .5f + r;
+    const float right = w * .5f - r;
+    const float bottom = -h * .5f + r;
+    const float top = h * .5f - r;
+    node->drawSegment({left, top}, {right, top}, r, color);
+    node->drawSegment({left, bottom}, {right, bottom}, r, color);
+    node->drawSegment({left, bottom}, {left, top}, r, color);
+    node->drawSegment({right, bottom}, {right, top}, r, color);
+    node->drawDot({left, top}, r, color);
+    node->drawDot({right, top}, r, color);
+    node->drawDot({left, bottom}, r, color);
+    node->drawDot({right, bottom}, r, color);
+    parent->addChild(node, z);
+}
+
 CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
                     float maxW, float maxH, ccColor3B tint = ccc3(225, 226, 246),
-                    const char* font = "bigFont.fnt", float maxScale = .54f) {
+                    const char* font = "bigFont.fnt", float maxScale = .40f) {
     // Long descriptions wrap into readable lines. Short labels (including every
     // navigation/tab label) remain single-line and keep their existing styling.
     std::string layout = value;
@@ -83,14 +104,24 @@ CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
 
 void card(CCNode* parent, float x, float y, float w, float h,
           ccColor4B fill = rgba(20, 25, 49, 250)) {
-    // 3D glass card: offset shadow, outer metal rim, inset bevel and fine specular edges.
-    rect(parent, x + 5, y - 6, w, h, rgba(1, 3, 13, 238), 1);
-    rect(parent, x, y, w, h, rgba(126, 107, 190), 2);
-    rect(parent, x + 1, y + 1, w - 2, h - 2, rgba(8, 12, 31), 3);
-    rect(parent, x + 3, y + 3, w - 6, h - 6, fill, 4);
-    rect(parent, x + 7, y + h - 6, w - 14, 1.2f, rgba(211, 190, 255, 170), 5);
-    rect(parent, x + 7, y + 6, w - 14, 1, rgba(4, 7, 20, 190), 5);
-    rect(parent, x + 5, y + 10, 2, h - 20, rgba(170, 142, 245, 120), 5);
+    // Rounded glass card with a dropped shadow, cool metal rim and inset face.
+    roundedRect(parent, x + 5.f, y - 6.f, w, h, 12.f,
+                ccc4f(.005f, .008f, .025f, .94f), 1);
+    roundedRect(parent, x, y, w, h, 12.f,
+                ccc4f(.43f, .53f, .82f, .96f), 2);
+    roundedRect(parent, x + 1.5f, y + 1.5f, w - 3.f, h - 3.f, 10.f,
+                ccc4f(.025f, .04f, .095f, .99f), 3);
+    roundedRect(parent, x + 3.5f, y + 3.5f, w - 7.f, h - 7.f, 8.f,
+                ccc4f(fill.r / 255.f, fill.g / 255.f, fill.b / 255.f, fill.a / 255.f), 4);
+
+    auto glint = CCDrawNode::create();
+    if (glint) {
+        glint->drawSegment({x + 18.f, y + h - 7.f}, {x + w - 18.f, y + h - 7.f},
+                           1.f, ccc4f(.83f, .90f, 1.f, .24f));
+        glint->drawSegment({x + 10.f, y + 13.f}, {x + 10.f, y + h - 13.f},
+                           .8f, ccc4f(.57f, .76f, 1.f, .20f));
+        parent->addChild(glint, 5);
+    }
 }
 
 void star(CCNode* parent, float x, float y, float size, unsigned char opacity, float delay) {
@@ -179,6 +210,61 @@ void addWindFlower(CCNode* parent, float x, float y, float scale, float delay, f
 }
 }
 
+
+void drawVirgoConstellation(CCNode* parent, CCPoint center, float scale, float alpha, bool showLabel) {
+    if (!parent) return;
+    // Stylized Virgo star map: the connecting lines trace the constellation's long Y-like form.
+    const CCPoint stars[] = {
+        {-78.f, 82.f}, {-26.f, 61.f}, {37.f, 76.f}, {7.f, 24.f},
+        {-46.f, -13.f}, {-66.f, -67.f}, {-7.f, -82.f},
+        {53.f, -112.f}, {-112.f, -118.f}, {-34.f, -145.f}
+    };
+    const int links[][2] = {
+        {0,1},{1,2},{1,3},{3,4},{4,5},{5,6},{6,7},{5,8},{5,9}
+    };
+    auto lines = CCDrawNode::create();
+    if (lines) {
+        for (const auto& edge : links) {
+            const auto a = stars[edge[0]];
+            const auto b = stars[edge[1]];
+            lines->drawSegment({a.x * scale, a.y * scale}, {b.x * scale, b.y * scale},
+                               1.25f, ccc4f(.46f, .77f, 1.f, alpha * .72f));
+        }
+        lines->setPosition(center);
+        parent->addChild(lines, 6);
+    }
+
+    for (int i = 0; i < 10; ++i) {
+        auto halo = CCDrawNode::create();
+        if (halo) {
+            halo->drawDot({0, 0}, (i == 5 ? 8.2f : 5.2f) * scale,
+                          ccc4f(.41f, .70f, 1.f, alpha * .13f));
+            halo->setPosition({center.x + stars[i].x * scale, center.y + stars[i].y * scale});
+            parent->addChild(halo, 7);
+            halo->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCScaleTo::create(1.4f + (i % 3) * .3f, 1.25f)),
+                CCEaseSineInOut::create(CCScaleTo::create(1.4f + (i % 3) * .3f, .82f)), nullptr)));
+        }
+        auto point = CCDrawNode::create();
+        if (point) {
+            point->drawDot({0, 0}, (i == 5 ? 3.6f : 2.5f) * scale,
+                           ccc4f(.83f, .93f, 1.f, alpha));
+            point->setPosition({center.x + stars[i].x * scale, center.y + stars[i].y * scale});
+            parent->addChild(point, 8);
+        }
+    }
+
+    if (showLabel) {
+        auto label = CCLabelBMFont::create("VIRGO  /  CONSTELLATION", "bigFont.fnt");
+        if (label) {
+            label->setScale(.38f * scale / .58f);
+            label->setColor(ccc3(151, 193, 238));
+            label->setPosition({center.x, center.y - 96.f * scale});
+            parent->addChild(label, 8);
+        }
+    }
+}
+
 class FloweristOverlay final : public CCLayer {
     struct Hit {
         int tag;
@@ -222,68 +308,71 @@ class FloweristOverlay final : public CCLayer {
 
     void button(CCNode* parent, const std::string& caption, float x, float y,
                 float w, float h, int tag, bool page = false, bool modal = false, int style = 0) {
-        // Wide oval buttons with a colored hover halo.
-        ccColor3B normal = style == 1 ? ccc3(34, 104, 82) :
-                           style == 2 ? ccc3(112, 47, 72) :
-                           style == 3 ? ccc3(91, 66, 145) : ccc3(42, 46, 83);
-        ccColor3B hot = style == 1 ? ccc3(43, 194, 130) :
-                        style == 2 ? ccc3(236, 76, 115) :
-                        style == 3 ? ccc3(153, 112, 226) : ccc3(99, 121, 194);
+        // True horizontal capsules: wide oval silhouette, inset rim, soft under-shadow.
+        ccColor3B normal = style == 1 ? ccc3(31, 112, 101) :
+                           style == 2 ? ccc3(117, 48, 83) :
+                           style == 3 ? ccc3(75, 91, 164) : ccc3(20, 35, 64);
+        ccColor3B hot = style == 1 ? ccc3(54, 222, 177) :
+                        style == 2 ? ccc3(255, 105, 174) :
+                        style == 3 ? ccc3(127, 153, 255) : ccc3(78, 178, 239);
 
         auto shadow = CCDrawNode::create();
         if (shadow) {
-            shadow->setPosition({x + 2.f, y - 3.f});
-            drawPill(shadow, w + 2.f, h + 2.f, ccc4f(.015f, .02f, .07f, .94f));
+            shadow->setPosition({x + 2.f, y - 3.5f});
+            drawPill(shadow, w + 7.f, h + 7.f, ccc4f(.005f, .008f, .025f, .96f));
             parent->addChild(shadow, 7);
         }
 
-        auto glow = CCDrawNode::create();
-        if (glow) {
-            glow->setPosition({x, y});
-            drawPill(glow, w + 14.f, h + 12.f,
-                     ccc4f(hot.r / 255.f, hot.g / 255.f, hot.b / 255.f, .30f));
-            glow->setVisible(false);
-            parent->addChild(glow, 8);
+        auto aura = CCDrawNode::create();
+        if (aura) {
+            aura->setPosition({x, y});
+            drawPill(aura, w + 16.f, h + 13.f,
+                     ccc4f(hot.r / 255.f, hot.g / 255.f, hot.b / 255.f, .22f));
+            aura->setVisible(false);
+            parent->addChild(aura, 8);
+        }
+
+        auto rim = CCDrawNode::create();
+        if (rim) {
+            rim->setPosition({x, y});
+            drawPill(rim, w + 4.f, h + 4.f, ccc4f(.60f, .68f, .98f, .98f));
+            parent->addChild(rim, 9);
         }
 
         auto plate = CCDrawNode::create();
         if (plate) {
             plate->setPosition({x, y});
-            drawPill(plate, w + 2.f, h + 2.f, ccc4f(.69f, .57f, .91f, .94f));
-            parent->addChild(plate, 9);
-            auto inset = CCDrawNode::create();
-            if (inset) {
-                inset->setPosition({x, y});
-                drawPill(inset, w - 2.f, h - 2.f,
-                         ccc4f(normal.r / 255.f, normal.g / 255.f, normal.b / 255.f, .99f));
-                parent->addChild(inset, 10);
-                // Store the inner capsule for hover tinting while the outer rim stays polished.
-                plate = inset;
-            }
+            drawPill(plate, w, h,
+                     ccc4f(normal.r / 255.f, normal.g / 255.f, normal.b / 255.f, .99f));
+            parent->addChild(plate, 10);
         }
 
         auto shine = CCDrawNode::create();
         if (shine) {
             shine->setPosition({x, y});
-            shine->drawSegment({-w * .30f, h * .24f}, {w * .30f, h * .24f}, .9f,
-                               ccc4f(.96f, .91f, 1.f, .25f));
-            parent->addChild(shine, 10);
+            // A short, curved-looking highlight across the top third of the capsule.
+            shine->drawSegment({-w * .31f, h * .23f}, {w * .31f, h * .23f}, 1.05f,
+                               ccc4f(.94f, .96f, 1.f, .42f));
+            parent->addChild(shine, 11);
         }
 
         const bool isTab = !page && !modal && tag >= 0 && tag < TAB_COUNT;
-        text(parent, caption, x + 1, y, w - 18.f, h * .58f,
-             ccc3(249, 245, 255), "bigFont.fnt", isTab ? .78f : .60f);
-        m_hits.push_back({tag, {x, y}, w, h, parent, plate, glow, normal, hot, page, modal});
+        text(parent, caption, x, y - .2f, w - 20.f, h * .60f,
+             ccc3(246, 249, 255), "bigFont.fnt", isTab ? .78f : .44f);
+        m_hits.push_back({tag, {x, y}, w, h, parent, plate, aura, normal, hot, page, modal});
     }
 
     void updateNav() {
         for (auto& hit : m_hits) {
             if (hit.page || hit.modal || hit.space != m_panel || hit.tag < 0 || hit.tag >= TAB_COUNT) continue;
             const bool selected = hit.tag == m_selected;
-            hit.normal = selected ? ccc3(77, 58, 121) : ccc3(35, 43, 76);
-            hit.hot = selected ? ccc3(124, 93, 205) : ccc3(79, 107, 174);
-            if (hit.plate) drawPill(hit.plate, hit.width, hit.height,
-                ccc4f(hit.normal.r / 255.f, hit.normal.g / 255.f, hit.normal.b / 255.f, .98f));
+            hit.normal = selected ? ccc3(63, 91, 155) : ccc3(20, 35, 64);
+            hit.hot = selected ? ccc3(133, 157, 255) : ccc3(80, 185, 244);
+            if (hit.plate) {
+                const auto col = hit.normal;
+                drawPill(hit.plate, hit.width, hit.height,
+                    ccc4f(col.r / 255.f, col.g / 255.f, col.b / 255.f, .99f));
+            }
         }
     }
 
@@ -292,291 +381,221 @@ class FloweristOverlay final : public CCLayer {
         const float w = win.width;
         const float h = win.height;
 
-        // Multi-band sky gradient: deep periwinkle overhead, lavender middle,
-        // warm rose near the horizon. Thin bands avoid the old hard colour slabs.
-        const int bands = 64;
-        for (int i = 0; i < bands; ++i) {
-            const float t = static_cast<float>(i) / static_cast<float>(bands - 1);
-            const float y = h * t;
-            const float bandH = h / static_cast<float>(bands) + 1.2f;
-            float r, g, b;
-            if (t < .42f) {
-                // Bottom horizon: warm blush fading into lavender.
-                const float q = t / .42f;
-                r = .76f + (.31f - .76f) * q;
-                g = .43f + (.22f - .43f) * q;
-                b = .53f + (.42f - .53f) * q;
-            } else {
-                // Upper sky: lavender fading into deep periwinkle.
-                const float q = (t - .42f) / .58f;
-                r = .31f + (.075f - .31f) * q;
-                g = .22f + (.085f - .22f) * q;
-                b = .42f + (.22f - .42f) * q;
-            }
-            auto strip = CCLayerColor::create(
-                ccc4(static_cast<GLubyte>(r * 255.f), static_cast<GLubyte>(g * 255.f),
-                     static_cast<GLubyte>(b * 255.f), 255), w, bandH);
-            if (strip) {
-                strip->setPosition({0, y});
-                addChild(strip, -10);
-            }
-        }
+        // Deep-space base with layered violet/cyan nebulae. No blocky colour slabs.
+        rect(this, 0, 0, w, h, rgba(4, 7, 20, 255), -20);
 
-        // Warm horizon glow and a small sun give the scene a real sky landmark.
-        auto sunGlow = CCDrawNode::create();
-        if (sunGlow) {
-            sunGlow->drawDot({0, 0}, 66.f, ccc4f(1.f, .62f, .77f, .10f));
-            sunGlow->drawDot({0, 0}, 48.f, ccc4f(1.f, .70f, .75f, .15f));
-            sunGlow->drawDot({0, 0}, 31.f, ccc4f(1.f, .79f, .70f, .90f));
-            sunGlow->setPosition({w * .82f, h * .55f});
-            addChild(sunGlow, -7);
-            sunGlow->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCScaleTo::create(3.4f, 1.035f)),
-                CCEaseSineInOut::create(CCScaleTo::create(3.4f, .985f)), nullptr)));
-        }
-
-        // Tiny stars remain visible in the upper sky without competing with text.
-        for (int i = 0; i < 48; ++i) {
-            const float x = ((i * 137 + 43) % 997) / 997.f * w;
-            const float y = h * (.57f + ((i * 83 + 19) % 410) / 1000.f);
-            star(this, x, y, i % 8 == 0 ? 1.55f : .82f,
-                 static_cast<unsigned char>(66 + (i % 5) * 24), (i % 11) * .12f);
-        }
-
-        // Soft cloud clusters. Each cloud is built from circles, never oversized
-        // rectangles or thick bars, and drifts slowly to create gentle parallax.
-        auto addCloud = [this](float x, float y, float scale, float alpha, float delay) {
-            auto cloud = CCDrawNode::create();
+        auto makeNebula = [this](CCPoint at, float size, ccColor4F core, ccColor4F halo,
+                                 float driftX, float driftY, float duration) {
+            auto cloud = CCNode::create();
             if (!cloud) return;
-            const auto shade = ccc4f(.91f, .83f, 1.f, alpha * .55f);
-            const auto light = ccc4f(1.f, .86f, .93f, alpha);
-            cloud->drawDot({-22.f * scale, 0}, 14.f * scale, shade);
-            cloud->drawDot({-8.f * scale, 6.f * scale}, 18.f * scale, light);
-            cloud->drawDot({11.f * scale, 2.f * scale}, 16.f * scale, light);
-            cloud->drawDot({26.f * scale, -2.f * scale}, 11.f * scale, shade);
-            cloud->drawSegment({-27.f * scale, -7.f * scale}, {28.f * scale, -7.f * scale},
-                               8.f * scale, shade);
-            cloud->setPosition({x, y});
-            addChild(cloud, -6);
+            auto glow = CCDrawNode::create();
+            if (!glow) return;
+            glow->drawDot({0, 0}, size, halo);
+            glow->drawDot({-size * .16f, size * .06f}, size * .68f, core);
+            glow->drawDot({size * .19f, -size * .11f}, size * .39f,
+                          ccc4f(core.r, core.g, core.b, core.a * .72f));
+            cloud->addChild(glow);
+            cloud->setPosition(at);
+            addChild(cloud, -16);
             cloud->runAction(CCRepeatForever::create(CCSequence::create(
-                CCDelayTime::create(delay),
-                CCEaseSineInOut::create(CCMoveBy::create(7.f + delay, {18.f * scale, 1.8f * scale})),
-                CCEaseSineInOut::create(CCMoveBy::create(7.f + delay, {-18.f * scale, -1.8f * scale})),
-                nullptr)));
+                CCEaseSineInOut::create(CCMoveBy::create(duration, {driftX, driftY})),
+                CCEaseSineInOut::create(CCMoveBy::create(duration, {-driftX, -driftY})), nullptr)));
+            glow->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCScaleTo::create(duration * .72f, 1.08f)),
+                CCEaseSineInOut::create(CCScaleTo::create(duration * .72f, .96f)), nullptr)));
         };
-        addCloud(w * .16f, h * .70f, .92f, .29f, .15f);
-        addCloud(w * .51f, h * .83f, .66f, .23f, .70f);
-        addCloud(w * .91f, h * .72f, 1.04f, .27f, .35f);
+        makeNebula({w * .17f, h * .78f}, std::min(w, h) * .28f,
+                   ccc4f(.23f, .15f, .48f, .075f), ccc4f(.18f, .31f, .78f, .045f), 11.f, -5.f, 9.f);
+        makeNebula({w * .78f, h * .72f}, std::min(w, h) * .31f,
+                   ccc4f(.29f, .13f, .48f, .080f), ccc4f(.55f, .18f, .49f, .045f), -13.f, 6.f, 11.f);
+        makeNebula({w * .53f, h * .22f}, std::min(w, h) * .23f,
+                   ccc4f(.08f, .31f, .49f, .055f), ccc4f(.10f, .22f, .62f, .035f), 8.f, 4.f, 10.f);
 
-        // Distant rolling hills use fine contours and soft translucent layers.
-        auto horizon = CCDrawNode::create();
-        if (horizon) {
-            const ccColor4F farLine = ccc4f(.48f, .58f, .73f, .44f);
-            const ccColor4F nearLine = ccc4f(.39f, .56f, .62f, .54f);
-            horizon->drawSegment({-8, h * .19f}, {w * .17f, h * .235f}, 2.2f, farLine);
-            horizon->drawSegment({w * .17f, h * .235f}, {w * .34f, h * .205f}, 2.2f, farLine);
-            horizon->drawSegment({w * .34f, h * .205f}, {w * .52f, h * .25f}, 2.2f, farLine);
-            horizon->drawSegment({w * .52f, h * .25f}, {w * .72f, h * .205f}, 2.2f, farLine);
-            horizon->drawSegment({w * .72f, h * .205f}, {w + 8, h * .24f}, 2.2f, farLine);
-            horizon->drawSegment({-8, h * .135f}, {w * .22f, h * .17f}, 2.8f, nearLine);
-            horizon->drawSegment({w * .22f, h * .17f}, {w * .43f, h * .145f}, 2.8f, nearLine);
-            horizon->drawSegment({w * .43f, h * .145f}, {w * .70f, h * .18f}, 2.8f, nearLine);
-            horizon->drawSegment({w * .70f, h * .18f}, {w + 8, h * .15f}, 2.8f, nearLine);
-            addChild(horizon, -3);
-        }
-
-        // Ground gradient builds the foreground meadow from deep sage to soft mint.
-        const float groundH = h * .17f;
-        const int groundBands = 18;
-        for (int i = 0; i < groundBands; ++i) {
-            const float t = static_cast<float>(i) / static_cast<float>(groundBands - 1);
-            const float r = .075f + .055f * t;
-            const float g = .19f + .22f * t;
-            const float b = .22f + .12f * t;
-            auto strip = CCLayerColor::create(
-                ccc4(static_cast<GLubyte>(r * 255.f), static_cast<GLubyte>(g * 255.f),
-                     static_cast<GLubyte>(b * 255.f), 238), w,
-                groundH / static_cast<float>(groundBands) + 1.f);
-            if (strip) {
-                strip->setPosition({0, groundH * static_cast<float>(i) / groundBands});
-                addChild(strip, -2);
+        // Sparse star field: varied sizes and independent pulse timings create depth.
+        for (int i = 0; i < 112; ++i) {
+            const float x = ((i * 193 + 71) % 997) / 997.f * w;
+            const float y = ((i * 127 + 43) % 991) / 991.f * h;
+            const float radius = (i % 17 == 0) ? 2.0f : ((i % 5 == 0) ? 1.25f : .72f);
+            auto starNode = CCDrawNode::create();
+            if (!starNode) continue;
+            const auto tint = (i % 4 == 0) ? ccc4f(.60f, .83f, 1.f, .88f) :
+                              (i % 7 == 0) ? ccc4f(.95f, .69f, 1.f, .86f) :
+                                            ccc4f(.83f, .88f, 1.f, .78f);
+            starNode->drawDot({0, 0}, radius, tint);
+            if (i % 17 == 0) {
+                starNode->drawSegment({-radius * 2.7f, 0}, {radius * 2.7f, 0}, .55f,
+                                      ccc4f(tint.r, tint.g, tint.b, .55f));
+                starNode->drawSegment({0, -radius * 2.7f}, {0, radius * 2.7f}, .55f,
+                                      ccc4f(tint.r, tint.g, tint.b, .55f));
             }
+            starNode->setPosition({x, y});
+            addChild(starNode, -10);
+            starNode->runAction(CCRepeatForever::create(CCSequence::create(
+                CCDelayTime::create((i % 13) * .11f),
+                CCEaseSineInOut::create(CCScaleTo::create(1.0f + (i % 4) * .25f, 1.35f)),
+                CCEaseSineInOut::create(CCScaleTo::create(1.0f + (i % 4) * .25f, .78f)), nullptr)));
         }
 
-        auto meadow = CCNode::create();
-        addChild(meadow, 2);
-        // Far flowers are small and translucent; foreground flowers are larger.
-        const float xPos[] = {.025f, .075f, .13f, .20f, .27f, .34f, .42f, .50f,
-                              .58f, .66f, .74f, .82f, .90f, .96f};
-        const float yPos[] = {.055f, .095f, .045f, .075f, .035f, .11f, .055f,
-                              .085f, .04f, .105f, .05f, .085f, .04f, .075f};
-        const float scales[] = {.48f, .72f, .42f, .62f, .50f, .82f, .46f,
-                                .68f, .44f, .78f, .49f, .71f, .45f, .63f};
-        for (int i = 0; i < 14; ++i) {
-            addWindFlower(meadow, xPos[i] * w, yPos[i] * h, scales[i],
-                          (i % 7) * .19f, .48f + (i % 4) * .10f);
+        // Distant ringed planet gives the space scene a clear focal point.
+        auto planet = CCDrawNode::create();
+        if (planet) {
+            planet->drawDot({0, 0}, 28.f, ccc4f(.16f, .24f, .53f, .96f));
+            planet->drawDot({-8, 10}, 12.f, ccc4f(.50f, .55f, .94f, .32f));
+            planet->drawDot({8, -9}, 8.f, ccc4f(.05f, .10f, .28f, .44f));
+            planet->setPosition({w * .12f, h * .22f});
+            addChild(planet, -5);
+            auto ring = orbitalRing(this, {w * .12f, h * .22f}, 51.f, 15.f, -4);
+            if (ring) {
+                ring->setRotation(-19.f);
+                ring->runAction(CCRepeatForever::create(CCSequence::create(
+                    CCRotateBy::create(18.f, 5.f), CCRotateBy::create(18.f, -5.f), nullptr)));
+            }
+            planet->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCMoveBy::create(4.8f, {0, 3.f})),
+                CCEaseSineInOut::create(CCMoveBy::create(4.8f, {0, -3.f})), nullptr)));
         }
-        addWindFlower(meadow, w * .035f, h * .22f, .88f, .38f, .64f);
-        addWindFlower(meadow, w * .085f, h * .31f, .58f, .72f, .42f);
-        addWindFlower(meadow, w * .965f, h * .24f, .92f, .24f, .62f);
-        addWindFlower(meadow, w * .915f, h * .34f, .60f, .58f, .43f);
 
-        // Floating petals travel across the meadow on staggered wind paths.
-        for (int i = 0; i < 20; ++i) {
-            auto petal = CCDrawNode::create();
-            if (!petal) continue;
-            const float radius = 1.5f + (i % 4) * .42f;
-            petal->drawDot({0, 0}, radius, (i % 2)
-                ? ccc4f(1.f, .63f, .84f, .66f) : ccc4f(1.f, .83f, .91f, .62f));
-            petal->setPosition({w * (.08f + (i % 10) * .092f),
-                                h * (.20f + (i % 6) * .085f)});
-            meadow->addChild(petal, 5);
-            petal->runAction(CCRepeatForever::create(CCSequence::create(
-                CCDelayTime::create((i % 9) * .17f),
-                CCEaseSineInOut::create(CCMoveBy::create(3.5f, {22.f, 7.f})),
-                CCEaseSineInOut::create(CCMoveBy::create(3.5f, {-22.f, -7.f})), nullptr)));
+        // Small moving light trails. They drift slowly and loop without a hard flash.
+        for (int i = 0; i < 4; ++i) {
+            auto trail = CCDrawNode::create();
+            if (!trail) continue;
+            trail->drawSegment({-28.f, 0}, {0.f, 0}, 1.2f,
+                               i % 2 ? ccc4f(.63f, .79f, 1.f, .50f) : ccc4f(.90f, .70f, 1.f, .48f));
+            trail->setPosition({w * (.22f + .19f * i), h * (.68f + .055f * (i % 3))});
+            trail->setRotation(-17.f);
+            addChild(trail, -8);
+            trail->runAction(CCRepeatForever::create(CCSequence::create(
+                CCDelayTime::create(i * 1.1f),
+                CCEaseSineInOut::create(CCMoveBy::create(3.4f, {34.f, -12.f})),
+                CCEaseSineInOut::create(CCMoveBy::create(3.4f, {-34.f, 12.f})), nullptr)));
         }
+
+        // A faint zodiac constellation is also visible in the open sky around the panel.
+        drawVirgoConstellation(this, {w * .79f, h * .83f}, .48f, .38f, false);
     }
 
     void decorate() {
-        // Three inset rims create a machined, layered glass frame.
-        rect(m_panel, 0, 0, PANEL_W, PANEL_H, rgba(91, 80, 151), 0);
-        rect(m_panel, 2, 2, PANEL_W - 4, PANEL_H - 4, rgba(8, 12, 31), 1);
-        rect(m_panel, 5, 5, PANEL_W - 10, PANEL_H - 10, rgba(15, 18, 42, 236), 2);
-        rect(m_panel, 7, 7, NAV_W, PANEL_H - 14, rgba(13, 17, 39, 246), 3);
-        rect(m_panel, NAV_W + 7, 8, 1.5f, PANEL_H - 16, rgba(145, 129, 207), 4);
-        auto topGlint = CCDrawNode::create();
-        if (topGlint) {
-            topGlint->drawSegment({16, PANEL_H - 4}, {PANEL_W - 18, PANEL_H - 4},
-                                  1.f, ccc4f(.94f, .78f, 1.f, .35f));
-            m_panel->addChild(topGlint, 5);
+        // Premium sci-fi frame: layered graphite glass, thin violet/cyan metal rim.
+        roundedRect(m_panel, 0, 0, PANEL_W, PANEL_H, 15.f, ccc4f(.38f, .48f, .77f, .97f), 0);
+        roundedRect(m_panel, 1.5f, 1.5f, PANEL_W - 3.f, PANEL_H - 3.f, 13.f, ccc4f(.018f, .028f, .072f, .99f), 1);
+        roundedRect(m_panel, 4.f, 4.f, PANEL_W - 8.f, PANEL_H - 8.f, 11.f, ccc4f(.047f, .067f, .14f, .98f), 2);
+        rect(m_panel, 7.f, 7.f, NAV_W, PANEL_H - 14.f, rgba(8, 13, 31, 252), 3);
+        rect(m_panel, NAV_W + 7.f, 8.f, 1.2f, PANEL_H - 16.f, rgba(90, 150, 212, 160), 4);
+
+        auto trim = CCDrawNode::create();
+        if (trim) {
+            trim->drawSegment({18, PANEL_H - 4}, {PANEL_W - 18, PANEL_H - 4}, 1.15f,
+                              ccc4f(.58f, .78f, 1.f, .68f));
+            trim->drawSegment({18, 4}, {PANEL_W - 18, 4}, .8f,
+                              ccc4f(.47f, .58f, .91f, .35f));
+            m_panel->addChild(trim, 5);
         }
 
-        // Right-side control area: a restrained twilight gradient with a clean
-        // horizon. The sky stays visible behind the glass without loud colour slabs.
+        // Right-hand glass surface: a single continuous tone instead of striped slabs.
         auto field = CCNode::create();
         m_panel->addChild(field, 3);
         const float fieldX = NAV_W + 9.f;
         const float fieldW = PANEL_W - fieldX - 8.f;
         const float fieldY = 8.f;
         const float fieldH = PANEL_H - 16.f;
-        const int glassBands = 36;
-        for (int i = 0; i < glassBands; ++i) {
-            const float t = static_cast<float>(i) / static_cast<float>(glassBands - 1);
-            const float r = .055f + .11f * t;
-            const float g = .075f + .055f * t;
-            const float b = .18f + .14f * t;
-            auto strip = CCLayerColor::create(
-                ccc4(static_cast<GLubyte>(r * 255.f), static_cast<GLubyte>(g * 255.f),
-                     static_cast<GLubyte>(b * 255.f), 232), fieldW,
-                fieldH / static_cast<float>(glassBands) + .8f);
-            if (strip) {
-                strip->setPosition({fieldX, fieldY + fieldH * static_cast<float>(i) / glassBands});
-                field->addChild(strip, 0);
-            }
+        rect(field, fieldX, fieldY, fieldW, fieldH, rgba(8, 12, 30, 218), 0);
+
+        // Large low-opacity nebula blooms create depth behind the content without obscuring it.
+        auto nebulaOne = CCDrawNode::create();
+        if (nebulaOne) {
+            nebulaOne->drawDot({0, 0}, 116.f, ccc4f(.27f, .23f, .66f, .075f));
+            nebulaOne->drawDot({18, 12}, 72.f, ccc4f(.21f, .54f, .80f, .045f));
+            nebulaOne->setPosition({fieldX + 375.f, 312.f});
+            field->addChild(nebulaOne, 1);
+            nebulaOne->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCScaleTo::create(4.5f, 1.07f)),
+                CCEaseSineInOut::create(CCScaleTo::create(4.5f, .96f)), nullptr)));
+        }
+        auto nebulaTwo = CCDrawNode::create();
+        if (nebulaTwo) {
+            nebulaTwo->drawDot({0, 0}, 94.f, ccc4f(.46f, .18f, .53f, .055f));
+            nebulaTwo->drawDot({-14, 9}, 52.f, ccc4f(.16f, .38f, .73f, .045f));
+            nebulaTwo->setPosition({fieldX + 108.f, 105.f});
+            field->addChild(nebulaTwo, 1);
+            nebulaTwo->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCScaleTo::create(5.2f, 1.06f)),
+                CCEaseSineInOut::create(CCScaleTo::create(5.2f, .95f)), nullptr)));
         }
 
-        // A soft horizon sheen and distant cloud wisps add atmosphere without
-        // covering the cards or creating the previous chunky rectangles.
-        auto horizon = CCDrawNode::create();
-        if (horizon) {
-            horizon->drawSegment({fieldX + 8, 58}, {PANEL_W - 10, 65}, 1.5f,
-                                 ccc4f(.91f, .58f, .82f, .30f));
-            horizon->drawSegment({fieldX + 18, 48}, {PANEL_W - 14, 54}, 1.f,
-                                 ccc4f(.60f, .72f, .91f, .22f));
-            field->addChild(horizon, 1);
-        }
-        auto cloudA = CCDrawNode::create();
-        if (cloudA) {
-            cloudA->drawDot({0, 0}, 14, ccc4f(.77f, .75f, .98f, .055f));
-            cloudA->drawDot({17, 4}, 17, ccc4f(.91f, .72f, .94f, .065f));
-            cloudA->drawDot({35, 0}, 12, ccc4f(.80f, .78f, 1.f, .05f));
-            cloudA->setPosition({fieldX + 44, 303});
-            field->addChild(cloudA, 1);
-            cloudA->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCMoveBy::create(6.f, {13.f, 1.f})),
-                CCEaseSineInOut::create(CCMoveBy::create(6.f, {-13.f, -1.f})), nullptr)));
-        }
-        auto cloudB = CCDrawNode::create();
-        if (cloudB) {
-            cloudB->drawDot({0, 0}, 10, ccc4f(.76f, .75f, .98f, .045f));
-            cloudB->drawDot({13, 3}, 13, ccc4f(.94f, .75f, .94f, .055f));
-            cloudB->drawDot({28, 0}, 9, ccc4f(.80f, .80f, 1.f, .045f));
-            cloudB->setPosition({PANEL_W - 120, 278});
-            field->addChild(cloudB, 1);
-            cloudB->runAction(CCRepeatForever::create(CCSequence::create(
-                CCEaseSineInOut::create(CCMoveBy::create(7.f, {-10.f, 1.f})),
-                CCEaseSineInOut::create(CCMoveBy::create(7.f, {10.f, -1.f})), nullptr)));
+        // Fine stars across the panel's open areas; cards sit above them.
+        for (int i = 0; i < 35; ++i) {
+            auto point = CCDrawNode::create();
+            if (!point) continue;
+            const float radius = (i % 9 == 0) ? 1.65f : .85f;
+            point->drawDot({0, 0}, radius, (i % 4 == 0)
+                ? ccc4f(.68f, .83f, 1.f, .60f) : ccc4f(.83f, .86f, 1.f, .40f));
+            point->setPosition({fieldX + 18.f + static_cast<float>((i * 79 + 31) % 480),
+                                22.f + static_cast<float>((i * 53 + 17) % 390)});
+            field->addChild(point, 2);
+            point->runAction(CCRepeatForever::create(CCSequence::create(
+                CCDelayTime::create((i % 8) * .16f),
+                CCEaseSineInOut::create(CCScaleTo::create(1.2f, 1.45f)),
+                CCEaseSineInOut::create(CCScaleTo::create(1.2f, .78f)), nullptr)));
         }
 
-        // A low, irregular flower border reads as a meadow rather than a tiled strip.
-        const float flowerX[] = {184, 213, 258, 306, 356, 410, 468, 522, 579, 631, 680};
-        const float flowerY[] = {10, 22, 13, 32, 15, 25, 11, 29, 14, 23, 12};
-        const float flowerScale[] = {.45f, .65f, .43f, .73f, .50f, .68f, .42f, .71f, .46f, .64f, .44f};
-        for (int i = 0; i < 11; ++i) {
-            addWindFlower(field, flowerX[i], flowerY[i], flowerScale[i], (i % 6) * .21f, .49f);
-        }
-        addWindFlower(field, 190, 76, .54f, .34f, .34f);
-        addWindFlower(field, 687, 90, .58f, .74f, .32f);
+        // The Virgo constellation is a signature element in the open upper-right sky.
+        drawVirgoConstellation(field, {fieldX + fieldW * .80f, 298.f}, .43f, .82f, false);
 
-        for (int i = 0; i < 16; ++i) {
-            auto petal = CCDrawNode::create();
-            if (!petal) continue;
-            petal->drawDot({0, 0}, 1.5f + (i % 3) * .35f, ccc4f(1.f, .66f, .86f, .42f));
-            petal->setPosition({fieldX + 22.f + static_cast<float>((i * 47) % 480),
-                                92.f + static_cast<float>((i * 31) % 226)});
-            field->addChild(petal, 2);
-            petal->runAction(CCRepeatForever::create(CCSequence::create(
-                CCDelayTime::create((i % 7) * .13f),
-                CCEaseSineInOut::create(CCMoveBy::create(3.1f, {10.f, 2.5f})),
-                CCEaseSineInOut::create(CCMoveBy::create(3.1f, {-10.f, -2.5f})), nullptr)));
+        // A few slow drifting particles give the header area subtle motion.
+        for (int i = 0; i < 12; ++i) {
+            auto particle = CCDrawNode::create();
+            if (!particle) continue;
+            particle->drawDot({0, 0}, 1.25f + (i % 3) * .28f,
+                              ccc4f(.63f, .83f, 1.f, .55f));
+            particle->setPosition({fieldX + 25.f + static_cast<float>((i * 43) % 440),
+                                   255.f + static_cast<float>((i * 19) % 90)});
+            field->addChild(particle, 3);
+            particle->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCMoveBy::create(3.5f + (i % 3), {8.f, 5.f})),
+                CCEaseSineInOut::create(CCMoveBy::create(3.5f + (i % 3), {-8.f, -5.f})), nullptr)));
         }
 
-        for (int i = 0; i < 22; ++i) {
-            auto dot = CCDrawNode::create();
-            if (!dot) continue;
-            dot->drawDot({0, 0}, i % 4 == 0 ? 1.5f : .8f, ccc4f(.72f, .79f, 1.f, .40f));
-            dot->setPosition({194.f + static_cast<float>((i * 79 + 13) % 487),
-                              27.f + static_cast<float>((i * 53 + 9) % 330)});
-            m_panel->addChild(dot, 2);
+        // Brand lockup: a small astronomical sigil, no flower icon or old project name.
+        auto sigil = CCDrawNode::create();
+        if (sigil) {
+            sigil->drawSegment({-10, 0}, {0, 13}, 2.0f, ccc4f(.65f, .82f, 1.f, .96f));
+            sigil->drawSegment({0, 13}, {10, 0}, 2.0f, ccc4f(.65f, .82f, 1.f, .96f));
+            sigil->drawSegment({10, 0}, {0, -13}, 2.0f, ccc4f(.77f, .60f, 1.f, .96f));
+            sigil->drawSegment({0, -13}, {-10, 0}, 2.0f, ccc4f(.77f, .60f, 1.f, .96f));
+            sigil->drawDot({0, 0}, 3.2f, ccc4f(.91f, .94f, 1.f, 1.f));
+            sigil->setPosition({31, PANEL_H - 36});
+            m_panel->addChild(sigil, 6);
+            sigil->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCScaleTo::create(2.1f, 1.08f)),
+                CCEaseSineInOut::create(CCScaleTo::create(2.1f, .94f)), nullptr)));
         }
-        auto planet = CCDrawNode::create();
-        if (planet) {
-            planet->drawDot({0, 0}, 23.f, ccc4f(.30f, .38f, .78f, .94f));
-            planet->drawDot({-7, 8}, 9.f, ccc4f(.68f, .61f, 1.f, .28f));
-            planet->drawSegment({-31, -7}, {31, 8}, 2.f, ccc4f(.65f, .72f, 1.f, .65f));
-            planet->setPosition({PANEL_W - 48, PANEL_H - 43});
-            m_panel->addChild(planet, 4);
-            auto ring = orbitalRing(m_panel, {PANEL_W - 48, PANEL_H - 43}, 38, 13, 3);
-            if (ring) ring->setRotation(-18.f);
-        }
+        text(m_panel, "VIRGO", 100, PANEL_H - 27, 126, 24,
+             ccc3(243, 247, 255), "goldFont.fnt", .78f);
+        text(m_panel, "PREDICTIVE INPUT SYSTEM", 100, PANEL_H - 49, 126, 11,
+             ccc3(129, 185, 235), "bigFont.fnt", .46f);
+        text(m_panel, "BUILD 02  /  60 TICK CAP", 100, PANEL_H - 72, 126, 9,
+             ccc3(104, 139, 191), "bigFont.fnt", .40f);
 
-        flower(m_panel, {31, PANEL_H - 35}, 10);
-        text(m_panel, "FLOWERIST", 99, PANEL_H - 27, 126, 24,
-             ccc3(244, 204, 255), "goldFont.fnt", .76f);
-        text(m_panel, "COSMIC CONTROL CENTER", 99, PANEL_H - 49, 126, 11,
-             ccc3(132, 168, 231), "bigFont.fnt", .48f);
-        text(m_panel, "BUILD 02  /  60 TICK CAP", 99, PANEL_H - 72, 126, 9,
-             ccc3(104, 131, 185), "bigFont.fnt", .44f);
-
+        // Spacious, consistently aligned capsule navigation. Tab typography stays large.
         for (int i = 0; i < TAB_COUNT; ++i) {
-            const float y = PANEL_H - 122.f - i * 48.f;
-            button(m_panel, TAB_NAMES[i], 91, y, 154, 30, i, false, false, i == m_selected ? 3 : 0);
+            const float y = PANEL_H - 120.f - i * 49.f;
+            button(m_panel, TAB_NAMES[i], 91, y, 156, 27, i, false, false, i == m_selected ? 3 : 0);
         }
-        button(m_panel, "GUI GUIDE", 91, 34, 154, 29, 110);
-        text(m_panel, "F2  MENU  /  CLOSE", 91, 12, 140, 9, ccc3(94, 119, 170));
+        button(m_panel, "GUIDE", 91, 33, 156, 27, 110);
+        text(m_panel, "F2  MENU / CLOSE", 91, 12, 140, 9, ccc3(94, 133, 186), "bigFont.fnt", .40f);
         button(m_panel, "X", PANEL_W - 24, PANEL_H - 25, 34, 30, 100);
-        text(m_panel, "ONLINE", PANEL_W - 95, PANEL_H - 28, 68, 12, ccc3(96, 230, 183));
+        text(m_panel, "ONLINE", PANEL_W - 95, PANEL_H - 28, 68, 12,
+             ccc3(85, 236, 190), "bigFont.fnt", .40f);
         updateNav();
     }
 
     void sectionTitle(const std::string& title, const std::string& subtitle) {
-        text(m_content, "CONTROL CENTER", 430, 414, 450, 10,
-             ccc3(117, 145, 205), "bigFont.fnt", .48f);
+        text(m_content, "VIRGO  /  SPACE CONTROL", 430, 414, 450, 10,
+             ccc3(117, 163, 220), "bigFont.fnt", .43f);
         text(m_content, title, 430, 390, 450, 27,
-             ccc3(238, 220, 255), "goldFont.fnt", .76f);
+             ccc3(238, 220, 255), "goldFont.fnt", .70f);
         text(m_content, subtitle, 430, 365, 455, 21,
-             ccc3(145, 170, 220), "bigFont.fnt", .52f);
+             ccc3(145, 170, 220), "bigFont.fnt", .43f);
         rect(m_content, 196, 346, 470, 1, rgba(97, 107, 159, 170), 4);
         rect(m_content, 196, 346, 72, 2, rgba(166, 115, 244, 225), 5);
     }
@@ -609,9 +628,9 @@ class FloweristOverlay final : public CCLayer {
 
             text(m_content, "LIVE CONSOLE", 232, 164, 190, 17, ccc3(208, 195, 255));
             text(m_content, "Open the log console when needed.",
-                 232, 135, 255, 24, ccc3(136, 156, 205), "bigFont.fnt", .50f);
+                 232, 135, 255, 24, ccc3(136, 156, 205), "bigFont.fnt", .42f);
             button(m_content, s_consoleVisible ? "CLOSE CONSOLE" : "OPEN CONSOLE",
-                   555, 143, 156, 34, 103, true);
+                   555, 143, 164, 32, 103, true);
         } else if (m_selected == 1) {
             const char* names[] = {"LOW-END", "BALANCED", "CUSTOM"};
             const char* detail[] = {"Prioritizes a lighter interface", "A balanced default profile", "A manually configured profile"};
@@ -691,7 +710,7 @@ class FloweristOverlay final : public CCLayer {
     }
 
     void drawLOK() {
-        // LOK is the custom Flowerist guide mascot. Keep the character prominent
+        // LOK is the custom VIRGO guide mascot. Keep the character prominent
         // on the left and use a compact speech capsule that never covers her.
         auto portrait = CCNode::create();
         portrait->setPosition({238, 218});
@@ -718,8 +737,8 @@ class FloweristOverlay final : public CCLayer {
         portrait->addChild(shadow, 2);
 
         auto body = CCDrawNode::create();
-        const auto shell = ccc4f(.94f, .57f, .83f, 1.f);
-        const auto shade = ccc4f(.80f, .38f, .73f, 1.f);
+        const auto shell = ccc4f(.48f, .69f, .98f, 1.f);
+        const auto shade = ccc4f(.27f, .39f, .78f, 1.f);
         body->drawSegment({-18, 12}, {18, 12}, 22, shell);
         body->drawSegment({-27, -3}, {27, -3}, 25, shell);
         body->drawSegment({-22, -14}, {22, -14}, 17, shell);
@@ -750,8 +769,8 @@ class FloweristOverlay final : public CCLayer {
         }
 
         auto expression = CCDrawNode::create();
-        expression->drawDot({-21, -8}, 4.8f, ccc4f(1.f, .30f, .63f, .47f));
-        expression->drawDot({21, -8}, 4.8f, ccc4f(1.f, .30f, .63f, .47f));
+        expression->drawDot({-21, -8}, 4.8f, ccc4f(.54f, .78f, 1.f, .52f));
+        expression->drawDot({21, -8}, 4.8f, ccc4f(.54f, .78f, 1.f, .52f));
         expression->drawSegment({-5, -12}, {0, -15}, 1.8f, ccc4f(.43f, .15f, .36f, 1.f));
         expression->drawSegment({0, -15}, {5, -12}, 1.8f, ccc4f(.43f, .15f, .36f, 1.f));
         portrait->addChild(expression, 5);
@@ -759,7 +778,16 @@ class FloweristOverlay final : public CCLayer {
         auto crest = CCNode::create();
         crest->setPosition({0, 40});
         portrait->addChild(crest, 6);
-        flower(crest, {0, 0}, 14.f);
+        auto zodiacMark = CCDrawNode::create();
+        if (zodiacMark) {
+            zodiacMark->drawSegment({-9, 0}, {-3, 10}, 2.f, ccc4f(.72f, .88f, 1.f, 1.f));
+            zodiacMark->drawSegment({-3, 10}, {4, -1}, 2.f, ccc4f(.72f, .88f, 1.f, 1.f));
+            zodiacMark->drawSegment({4, -1}, {9, 9}, 2.f, ccc4f(.72f, .88f, 1.f, 1.f));
+            zodiacMark->drawSegment({9, 9}, {8, -8}, 2.f, ccc4f(.72f, .88f, 1.f, 1.f));
+            zodiacMark->drawSegment({8, -8}, {1, -11}, 2.f, ccc4f(.72f, .88f, 1.f, 1.f));
+            zodiacMark->drawDot({0, 0}, 2.4f, ccc4f(.96f, .97f, 1.f, 1.f));
+            crest->addChild(zodiacMark);
+        }
         if (m_animated) {
             crest->runAction(CCRepeatForever::create(CCSequence::create(
                 CCRotateBy::create(6.f, 360.f), nullptr)));
@@ -790,14 +818,14 @@ class FloweristOverlay final : public CCLayer {
         tail->drawSegment({-84, 4}, {-101, 13}, 2.2f, ccc4f(.72f, .61f, .95f, .92f));
         bubble->addChild(tail, 1);
 
-        text(bubble, "LOK  /  GUIDE", 0, 22, 146, 12,
-             ccc3(225, 197, 255), "bigFont.fnt", .48f);
+        text(bubble, "LOK  /  VIRGO ASSISTANT", 0, 22, 146, 12,
+             ccc3(225, 197, 255), "bigFont.fnt", .42f);
         static const char* lines[] = {
-            "Hi! I'm LOK. Welcome!",
+            "Hi! I'm LOK, your VIRGO assistant!",
             "Use the left rail to switch tabs.",
             "Choose a stage card to begin.",
             "The console opens only on request.",
-            "You're all set. Enjoy Flowerist!"
+            "You're all set. Enjoy VIRGO!"
         };
         m_guideSpeech = text(bubble, lines[m_guideStep], 0, -7, 146, 34,
                              ccc3(232, 232, 250), "bigFont.fnt", .46f);
@@ -825,12 +853,12 @@ class FloweristOverlay final : public CCLayer {
         card(m_modalLayer, 128, 82, 448, 284, rgba(22, 22, 52, 255));
         if (m_modal == 1) {
             text(m_modalLayer, "QUICK HELP", 352, 318, 300, 22, ccc3(226, 198, 255), "goldFont.fnt", .68f);
-            text(m_modalLayer, "Do you want a guide about the GUI?", 352, 267, 330, 20, ccc3(237, 237, 255), "bigFont.fnt", .54f);
-            text(m_modalLayer, "LOK appears only if you choose YES.", 352, 231, 320, 14, ccc3(151, 170, 218), "bigFont.fnt", .48f);
+            text(m_modalLayer, "Do you want a guide about the GUI?", 352, 267, 330, 20, ccc3(237, 237, 255), "bigFont.fnt", .44f);
+            text(m_modalLayer, "LOK appears only if you choose YES.", 352, 231, 320, 14, ccc3(151, 170, 218), "bigFont.fnt", .42f);
             button(m_modalLayer, "YES", 268, 174, 118, 38, 111, false, true, 1);
             button(m_modalLayer, "NO", 436, 174, 118, 38, 112, false, true, 2);
         } else {
-            text(m_modalLayer, "FLOWERIST GUI TOUR", 352, 338, 360, 22,
+            text(m_modalLayer, "VIRGO INTERFACE TOUR", 352, 338, 360, 22,
                  ccc3(226, 198, 255), "goldFont.fnt", .68f);
             drawLOK();
             button(m_modalLayer, m_guideStep == 4 ? "FINISH" : "NEXT", 414, 112, 104, 29, 113, false, true, 3);
@@ -861,9 +889,9 @@ class FloweristOverlay final : public CCLayer {
                     FILE* file = nullptr;
                     freopen_s(&file, "CONOUT$", "w", stdout);
                     freopen_s(&file, "CONOUT$", "w", stderr);
-                    SetConsoleTitleA("Flowerist Rewrite - Console");
+                    SetConsoleTitleA("VIRGO - Console");
                     s_consoleVisible = true;
-                    printf("[Flowerist] Console opened from the LOG tab.\n");
+                    printf("[VIRGO] Console opened from the LOG tab.\n");
                 } else s_consoleVisible = GetConsoleWindow() != nullptr;
             } else { FreeConsole(); s_consoleVisible = false; }
         } else if (tag >= 200 && tag < 206) {
