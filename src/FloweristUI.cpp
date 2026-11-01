@@ -9,6 +9,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include "VirgoShared.hpp"
 
 using namespace geode::prelude;
 
@@ -19,12 +20,11 @@ constexpr float NAV_W = 174.f;
 constexpr float PI = 3.1415926535f;
 constexpr int TAB_COUNT = 6;
 bool s_consoleVisible = false;
-int s_modeTicks[3] = {2, 2, 2}; // Session-persistent custom values shown in the Modes tab.
-const char* TAB_NAMES[TAB_COUNT] = {"OVERVIEW", "MODES", "STAGES", "ASSISTS", "SETTINGS", "COMPETITIVE"};
+const char* TAB_NAMES[TAB_COUNT] = {"LOGS", "STAGES", "MODES", "ASSISTS", "OPTIMIZATION", "COMPETITIVE"};
 const char* TAB_INFO[TAB_COUNT] = {
     "System status and recent activity",
-    "Choose how VIRGO handles its workload",
-    "Select a stage profile",
+    "Choose a stage and tune Cube, Wave and Ship",
+    "Choose which gamemodes use Predictive Input Buffer",
     "See the active assistance systems",
     "Tune the interface and performance",
     "A profile for rule-conscious play"
@@ -280,6 +280,69 @@ void drawVirgoConstellation(CCNode* parent, CCPoint center, float scale, float a
     }
 }
 
+void drawGamemodeIcon(CCNode* parent, int mode, CCPoint at, ccColor4F tint) {
+    auto icon = CCDrawNode::create();
+    if (!icon) return;
+    const float t = 2.0f;
+    auto line = [&](CCPoint a, CCPoint b, float width = t) {
+        icon->drawSegment(a, b, width, tint);
+    };
+    switch (mode) {
+        case 0: // Cube: thin isometric wireframe, not a filled block.
+            line({0, 12}, {-10, 5}); line({-10, 5}, {0, -2});
+            line({0, -2}, {10, 5}); line({10, 5}, {0, 12});
+            line({0, 12}, {0, -2}); line({-10, 5}, {0, 8}); line({10, 5}, {0, 8});
+            break;
+        case 1: // Wave: clean zig-zag trajectory.
+            line({-13, -7}, {-5, 7}, 2.5f); line({-5, 7}, {3, -7}, 2.5f);
+            line({3, -7}, {11, 7}, 2.5f); break;
+        case 2: // Ship: sleek flight arrow.
+            line({-13, -5}, {12, 0}, 2.3f); line({12, 0}, {-7, 8}, 2.3f);
+            line({-7, 8}, {-2, 1}, 2.0f); line({-2, 1}, {-13, -5}, 2.0f);
+            break;
+        case 3: // Ball: circular orb with a latitude arc.
+            for (int i = 0; i < 32; ++i) {
+                const float a = i * 6.2831853f / 32.f;
+                const float b = (i + 1) * 6.2831853f / 32.f;
+                line({std::cos(a) * 10.f, std::sin(a) * 10.f},
+                     {std::cos(b) * 10.f, std::sin(b) * 10.f}, 1.5f);
+            }
+            line({-8, 0}, {8, 0}, 1.2f); break;
+        case 4: // UFO: saucer and small dome.
+            line({-13, -3}, {13, -3}, 2.2f); line({-13, -3}, {-8, -7}, 1.8f);
+            line({-8, -7}, {8, -7}, 1.8f); line({8, -7}, {13, -3}, 1.8f);
+            line({-7, -2}, {-4, 5}, 1.8f); line({-4, 5}, {4, 5}, 1.8f);
+            line({4, 5}, {7, -2}, 1.8f); break;
+        case 5: // Robot: round head, antenna and eyes.
+            line({-8, -7}, {-10, -2}, 1.8f); line({-10, -2}, {-8, 7}, 1.8f);
+            line({-8, 7}, {8, 7}, 1.8f); line({8, 7}, {10, -2}, 1.8f);
+            line({10, -2}, {8, -7}, 1.8f); line({-8, -7}, {8, -7}, 1.8f);
+            line({0, 7}, {0, 12}, 1.6f); icon->drawDot({0, 14}, 2.f, tint);
+            icon->drawDot({-4, 1}, 1.6f, tint); icon->drawDot({4, 1}, 1.6f, tint);
+            break;
+        case 6: // Spider: central core and eight fine legs.
+            icon->drawDot({0, 0}, 3.2f, tint);
+            for (int side : {-1, 1}) {
+                line({side * 2.f, 2.f}, {side * 8.f, 9.f}, 1.6f);
+                line({side * 5.f, 1.f}, {side * 12.f, 3.f}, 1.6f);
+                line({side * 5.f, -1.f}, {side * 12.f, -4.f}, 1.6f);
+                line({side * 2.f, -2.f}, {side * 8.f, -10.f}, 1.6f);
+            }
+            break;
+        case 7: // Swing: tethered orb in motion.
+            icon->drawDot({0, 11}, 2.4f, tint); line({0, 11}, {7, -1}, 1.8f);
+            for (int i = 0; i < 24; ++i) {
+                const float a = (-.2f + i * 1.25f / 24.f);
+                const float b = (-.2f + (i + 1) * 1.25f / 24.f);
+                line({7.f + std::cos(a) * 5.f, -1.f + std::sin(a) * 5.f},
+                     {7.f + std::cos(b) * 5.f, -1.f + std::sin(b) * 5.f}, 1.5f);
+            }
+            break;
+    }
+    icon->setPosition(at);
+    parent->addChild(icon, 7);
+}
+
 class FloweristOverlay final : public CCLayer {
     struct Hit {
         int tag;
@@ -301,7 +364,6 @@ class FloweristOverlay final : public CCLayer {
     std::vector<Hit> m_hits;
     int m_selected = 0;
     int m_selectedStage = 0;
-    int m_selectedMode = 1;
     int m_modal = 0; // 0 = hidden, 1 = yes/no prompt, 2 = LOK guide
     int m_guideStep = 0;
     int m_hovered = -1;
@@ -375,6 +437,41 @@ class FloweristOverlay final : public CCLayer {
         text(parent, caption, x, y - .2f, w - 20.f, h * .60f,
              ccc3(246, 249, 255), "bigFont.fnt", isTab ? .78f : .44f);
         m_hits.push_back({tag, {x, y}, w, h, parent, plate, aura, normal, hot, page, modal});
+    }
+
+    void frameControl(CCNode* parent, const char* label, int modeId, float x, float y) {
+        const ccColor4F accents[] = {
+            ccc4f(.39f, .67f, 1.f, 1.f),
+            ccc4f(.72f, .51f, 1.f, 1.f),
+            ccc4f(.35f, .84f, .91f, 1.f)
+        };
+        const auto accent = accents[modeId];
+        auto shadow = CCDrawNode::create();
+        if (shadow) {
+            shadow->setPosition({x + 2.f, y - 3.f});
+            drawPill(shadow, 158.f, 36.f, ccc4f(.002f, .004f, .018f, .95f));
+            parent->addChild(shadow, 6);
+        }
+        auto rim = CCDrawNode::create();
+        if (rim) {
+            rim->setPosition({x, y});
+            drawPill(rim, 156.f, 34.f, ccc4f(accent.r, accent.g, accent.b, .88f));
+            parent->addChild(rim, 7);
+        }
+        auto plate = CCDrawNode::create();
+        if (plate) {
+            plate->setPosition({x, y});
+            drawPill(plate, 152.f, 30.f, ccc4f(.035f, .055f, .12f, .99f));
+            parent->addChild(plate, 8);
+        }
+        text(parent, label, x - 43.f, y, 57.f, 18.f,
+             ccc3(224, 233, 255), "bigFont.fnt", .40f);
+        text(parent, std::to_string(virgo::modeFrames[modeId]) + "F", x + 5.f, y,
+             42.f, 18.f, ccc3(248, 250, 255), "goldFont.fnt", .48f);
+        button(parent, "-", x + 46.f, y, 19.f, 21.f, 220 + modeId * 2,
+               true, false, 3);
+        button(parent, "+", x + 67.f, y, 19.f, 21.f, 221 + modeId * 2,
+               true, false, 3);
     }
 
     void updateNav() {
@@ -493,8 +590,8 @@ class FloweristOverlay final : public CCLayer {
 
         // Spacious, consistently aligned capsule navigation. Tab typography stays large.
         for (int i = 0; i < TAB_COUNT; ++i) {
-            const float y = PANEL_H - 120.f - i * 49.f;
-            button(m_panel, TAB_NAMES[i], 91, y, 156, 34, i, false, false, i == m_selected ? 3 : 0);
+            const float y = PANEL_H - 112.f - i * 38.f;
+            button(m_panel, TAB_NAMES[i], 91, y, 156, 30, i, false, false, i == m_selected ? 3 : 0);
         }
         button(m_panel, "GUIDE", 91, 33, 156, 34, 110);
         text(m_panel, "F2  MENU / CLOSE", 91, 12, 140, 9, ccc3(94, 133, 186), "bigFont.fnt", .40f);
@@ -546,99 +643,43 @@ class FloweristOverlay final : public CCLayer {
                  294, 135, 176, 24, ccc3(136, 156, 205), "bigFont.fnt", .40f);
             button(m_content, s_consoleVisible ? "CLOSE CONSOLE" : "OPEN CONSOLE",
                    555, 143, 164, 32, 103, true);
-        } else if (m_selected == 1) {
-            text(m_content, "MODE-SPECIFIC CUSTOM FRAME VALUES", 430, 326, 430, 17,
-                 ccc3(145, 175, 226), "bigFont.fnt", .40f);
-
-            const char* modeNames[] = {"CUBE", "WAVE", "SHIP"};
-            const char* modeInfo[] = {"STANDARD MOVEMENT", "DIAGONAL CONTROL", "CONTINUOUS CONTROL"};
-            const ccColor4F modeColors[] = {
-                ccc4f(.40f, .66f, 1.f, 1.f),
-                ccc4f(.72f, .48f, 1.f, 1.f),
-                ccc4f(.35f, .86f, .91f, 1.f)
-            };
-            const float rowY[] = {264.f, 184.f, 104.f};
-
-            for (int i = 0; i < 3; ++i) {
-                const float x = 430.f;
-                const float y = rowY[i];
-                const float w = 446.f;
-                const float h = 58.f;
-                const auto accent = modeColors[i];
-                const bool selected = m_selectedMode == i;
-
-                // One long capsule per mode: all text and its custom value live inside it.
-                auto shadow = CCDrawNode::create();
-                if (shadow) {
-                    shadow->setPosition({x + 2.f, y - 4.f});
-                    drawPill(shadow, w + 8.f, h + 8.f, ccc4f(.002f, .004f, .018f, .92f));
-                    m_content->addChild(shadow, 1);
-                }
-                auto rim = CCDrawNode::create();
-                if (rim) {
-                    rim->setPosition({x, y});
-                    drawPill(rim, w + 4.f, h + 4.f,
-                             selected ? ccc4f(accent.r, accent.g, accent.b, .98f)
-                                      : ccc4f(.34f, .43f, .65f, .96f));
-                    m_content->addChild(rim, 2);
-                }
-                auto plate = CCDrawNode::create();
-                if (plate) {
-                    plate->setPosition({x, y});
-                    drawPill(plate, w, h,
-                             selected ? ccc4f(.075f, .105f, .205f, .99f)
-                                      : ccc4f(.035f, .055f, .115f, .99f));
-                    m_content->addChild(plate, 3);
-                }
-
-                // Left accent and mode label.
-                auto marker = CCDrawNode::create();
-                if (marker) {
-                    marker->drawDot({0, 0}, 4.2f, accent);
-                    marker->drawDot({0, 0}, 8.2f,
-                                    ccc4f(accent.r, accent.g, accent.b, selected ? .18f : .10f));
-                    marker->setPosition({x - 187.f, y});
-                    m_content->addChild(marker, 5);
-                    marker->runAction(CCRepeatForever::create(CCSequence::create(
-                        CCEaseSineInOut::create(CCScaleTo::create(1.1f, 1.18f)),
-                        CCEaseSineInOut::create(CCScaleTo::create(1.1f, .92f)), nullptr)));
-                }
-                text(m_content, modeNames[i], x - 132.f, y + 7.f, 112.f, 18.f,
-                     selected ? ccc3(244, 241, 255) : ccc3(190, 204, 235),
-                     "bigFont.fnt", .60f);
-                text(m_content, modeInfo[i], x - 132.f, y - 12.f, 122.f, 10.f,
-                     ccc3(117, 151, 199), "bigFont.fnt", .34f);
-
-                // The value sits inside its own inset capsule, still inside the main mode pill.
-                auto valueSlotRim = CCDrawNode::create();
-                if (valueSlotRim) {
-                    valueSlotRim->setPosition({x + 73.f, y});
-                    drawPill(valueSlotRim, 122.f, 39.f,
-                             ccc4f(.34f, .48f, .75f, selected ? .90f : .64f));
-                    m_content->addChild(valueSlotRim, 5);
-                }
-                auto valueSlot = CCDrawNode::create();
-                if (valueSlot) {
-                    valueSlot->setPosition({x + 73.f, y});
-                    drawPill(valueSlot, 118.f, 35.f, ccc4f(.025f, .04f, .09f, .99f));
-                    m_content->addChild(valueSlot, 6);
-                }
-                text(m_content, "CUSTOM", x + 73.f, y + 10.f, 92.f, 9.f,
-                     ccc3(117, 157, 213), "bigFont.fnt", .32f);
-                text(m_content, std::to_string(s_modeTicks[i]) + " FRAMES", x + 73.f, y - 5.f,
-                     104.f, 14.f, ccc3(235, 241, 255), "bigFont.fnt", .46f);
-
-                // Small capsule steppers are placed inside the main pill, not outside it.
-                button(m_content, "-", x + 169.f, y, 31.f, 29.f,
-                       220 + i * 2, true, false, selected ? 3 : 0);
-                button(m_content, "+", x + 207.f, y, 31.f, 29.f,
-                       221 + i * 2, true, false, selected ? 3 : 0);
-            }
-            text(m_content, "SELECT A MODE AND SET ITS CUSTOM FRAME VALUE", 430, 49, 430, 16,
-                 ccc3(125, 151, 198), "bigFont.fnt", .36f);
         } else if (m_selected == 2) {
-            text(m_content, "Choose a stage profile. Each option has its own settings card.",
-                 430, 326, 430, 26, ccc3(142, 167, 226));
+            text(m_content, "CHOOSE WHICH GAMEMODES USE THE PREDICTIVE BUFFER", 430, 326, 430, 17,
+                 ccc3(145, 175, 226), "bigFont.fnt", .37f);
+
+            const int ids[] = {0, 3, 2, 4, 1, 5, 6, 7};
+            const char* names[] = {"CUBE", "BALL", "SHIP", "UFO", "WAVE", "ROBOT", "SPIDER", "SWING"};
+            const char* descriptions[] = {"Standard jump", "Gravity flip", "Continuous flight", "Tap-to-float",
+                                          "Wave trajectory", "Release jump", "Dash movement", "Gravity swing"};
+            const ccColor4F colors[] = {
+                ccc4f(.42f, .70f, 1.f, 1.f), ccc4f(.84f, .65f, 1.f, 1.f),
+                ccc4f(.37f, .86f, .94f, 1.f), ccc4f(.94f, .72f, .48f, 1.f),
+                ccc4f(.69f, .55f, 1.f, 1.f), ccc4f(.51f, .83f, .75f, 1.f),
+                ccc4f(.95f, .58f, .79f, 1.f), ccc4f(.57f, .75f, 1.f, 1.f)
+            };
+            for (int i = 0; i < 8; ++i) {
+                const int mode = ids[i];
+                const int col = i % 2;
+                const int row = i / 2;
+                const float x = col == 0 ? 314.f : 550.f;
+                const float y = 294.f - row * 74.f;
+                const bool enabled = virgo::modeEnabled[mode];
+                card(m_content, x - 109.f, y - 26.f, 218.f, 52.f,
+                     enabled ? rgba(19, 31, 58, 255) : rgba(13, 18, 38, 255));
+                drawGamemodeIcon(m_content, mode, {x - 82.f, y}, colors[i]);
+                text(m_content, names[i], x - 43.f, y + 7.f, 104.f, 15.f,
+                     enabled ? ccc3(232, 238, 255) : ccc3(135, 146, 174),
+                     "bigFont.fnt", .52f);
+                text(m_content, descriptions[i], x - 43.f, y - 11.f, 112.f, 11.f,
+                     ccc3(123, 151, 198), "bigFont.fnt", .34f);
+                button(m_content, enabled ? "ON" : "OFF", x + 73.f, y, 54.f, 23.f,
+                       300 + mode, true, false, enabled ? 3 : 2);
+            }
+            text(m_content, "DISABLED MODES PASS INPUT THROUGH WITHOUT BUFFERING", 430, 22, 430, 13,
+                 ccc3(115, 145, 191), "bigFont.fnt", .34f);
+        } else if (m_selected == 1) {
+            text(m_content, "STAGE PROFILES", 430, 326, 430, 17,
+                 ccc3(145, 175, 226), "bigFont.fnt", .40f);
             const char* names[] = {"STAGE 1", "STAGE 2", "STAGE 3", "STAGE 4", "EXTREME", "CUSTOM"};
             const char* detail[] = {"STARTER", "LIGHT", "STANDARD", "ADVANCED", "INTENSE", "PERSONAL"};
             const ccColor4B fills[] = {
@@ -649,15 +690,23 @@ class FloweristOverlay final : public CCLayer {
                 const int col = i % 3;
                 const int row = i / 3;
                 const float x = 270.f + col * 160.f;
-                const float y = row == 0 ? 244.f : 136.f;
-                card(m_content, x - 73, y - 40, 146, 92,
+                const float y = row == 0 ? 267.f : 194.f;
+                card(m_content, x - 71.f, y - 30.f, 142.f, 60.f,
                      i == m_selectedStage ? rgba(52, 39, 90, 255) : fills[i]);
-                text(m_content, names[i], x, y + 19, 130, 17,
-                     i == m_selectedStage ? ccc3(238, 214, 255) : ccc3(184, 194, 233));
-                text(m_content, detail[i], x, y - 3, 122, 13, ccc3(145, 166, 220));
-                button(m_content, i == m_selectedStage ? "ACTIVE" : "CHOOSE", x, y - 27,
-                       118, 25, 200 + i, true, false, i == m_selectedStage ? 3 : 0);
+                text(m_content, names[i], x, y + 13.f, 128.f, 15.f,
+                     i == m_selectedStage ? ccc3(238, 214, 255) : ccc3(184, 194, 233),
+                     "bigFont.fnt", .48f);
+                text(m_content, detail[i], x, y - 4.f, 120.f, 10.f,
+                     ccc3(145, 166, 220), "bigFont.fnt", .32f);
+                button(m_content, i == m_selectedStage ? "ACTIVE" : "CHOOSE", x, y - 20.f,
+                       92.f, 18.f, 200 + i, true, false, i == m_selectedStage ? 3 : 0);
             }
+
+            text(m_content, "MAIN MODE FRAME LIMITS", 430, 133, 430, 13,
+                 ccc3(150, 178, 229), "bigFont.fnt", .38f);
+            frameControl(m_content, "CUBE", 0, 270.f, 91.f);
+            frameControl(m_content, "WAVE", 1, 430.f, 91.f);
+            frameControl(m_content, "SHIP", 2, 590.f, 91.f);
         } else if (m_selected == 3) {
             card(m_content, 202, 194, 223, 132, rgba(23, 31, 57, 255));
             card(m_content, 438, 194, 223, 132, rgba(34, 27, 62, 255));
@@ -680,7 +729,7 @@ class FloweristOverlay final : public CCLayer {
             text(m_content, m_quiet ? "Status messages are hidden" : "Status messages are visible",
                  235, 193, 255, 26, ccc3(142, 164, 213));
             button(m_content, m_quiet ? "TURN OFF" : "TURN ON", 584, 204, 112, 31, 101, true);
-        } else {
+        } else if (m_selected == 5) {
             card(m_content, 204, 163, 460, 175, rgba(23, 25, 54, 255));
             text(m_content, "COMPETITIVE PROFILE", 432, 295, 360, 23, ccc3(221, 202, 255), "goldFont.fnt");
             text(m_content, "Review the rules of each event before enabling assistance.",
@@ -886,12 +935,23 @@ class FloweristOverlay final : public CCLayer {
             } else { FreeConsole(); s_consoleVisible = false; }
         } else if (tag >= 200 && tag < 206) {
             m_selectedStage = tag - 200;
+            // Stage profiles set the starting Cube/Wave/Ship limits; Custom keeps edits.
+            static const int stageFrames[5][3] = {
+                {2, 2, 2}, {4, 4, 4}, {8, 8, 8}, {16, 8, 16}, {24, 24, 24}
+            };
+            if (m_selectedStage < 5) {
+                for (int i = 0; i < 3; ++i) virgo::modeFrames[i] = stageFrames[m_selectedStage][i];
+            }
         } else if (tag >= 220 && tag < 226) {
             const int mode = (tag - 220) / 2;
             const bool increase = ((tag - 220) % 2) == 1;
-            m_selectedMode = mode;
             const int step = increase ? 1 : -1;
-            s_modeTicks[mode] = std::clamp(s_modeTicks[mode] + step, 0, 60);
+            virgo::modeFrames[mode] = std::clamp(virgo::modeFrames[mode] + step, 0, 60);
+            buildContent();
+            return;
+        } else if (tag >= 300 && tag < 308) {
+            const int mode = tag - 300;
+            virgo::modeEnabled[mode] = !virgo::modeEnabled[mode];
             buildContent();
             return;
         } else if (tag == 102) {
