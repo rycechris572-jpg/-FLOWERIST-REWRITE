@@ -19,6 +19,7 @@ constexpr float NAV_W = 174.f;
 constexpr float PI = 3.1415926535f;
 constexpr int TAB_COUNT = 6;
 bool s_consoleVisible = false;
+int s_modeTicks[3] = {2, 2, 2}; // Session-persistent custom values shown in the Modes tab.
 const char* TAB_NAMES[TAB_COUNT] = {"OVERVIEW", "MODES", "STAGES", "ASSISTS", "SETTINGS", "COMPETITIVE"};
 const char* TAB_INFO[TAB_COUNT] = {
     "System status and recent activity",
@@ -546,20 +547,95 @@ class FloweristOverlay final : public CCLayer {
             button(m_content, s_consoleVisible ? "CLOSE CONSOLE" : "OPEN CONSOLE",
                    555, 143, 164, 32, 103, true);
         } else if (m_selected == 1) {
-            const char* names[] = {"LOW-END", "BALANCED", "CUSTOM"};
-            const char* detail[] = {"Prioritizes a lighter interface", "A balanced default profile", "A manually configured profile"};
+            text(m_content, "MODE-SPECIFIC CUSTOM FRAME VALUES", 430, 326, 430, 17,
+                 ccc3(145, 175, 226), "bigFont.fnt", .40f);
+
+            const char* modeNames[] = {"CUBE", "WAVE", "SHIP"};
+            const char* modeInfo[] = {"STANDARD MOVEMENT", "DIAGONAL CONTROL", "CONTINUOUS CONTROL"};
+            const ccColor4F modeColors[] = {
+                ccc4f(.40f, .66f, 1.f, 1.f),
+                ccc4f(.72f, .48f, 1.f, 1.f),
+                ccc4f(.35f, .86f, .91f, 1.f)
+            };
+            const float rowY[] = {264.f, 184.f, 104.f};
+
             for (int i = 0; i < 3; ++i) {
-                const float x = 270.f + i * 160.f;
-                card(m_content, x - 73, 169, 146, 148,
-                     i == m_selectedMode ? rgba(43, 35, 80, 255) : rgba(22, 26, 54, 255));
-                text(m_content, names[i], x, 279, 130, 18,
-                     i == m_selectedMode ? ccc3(232, 211, 255) : ccc3(177, 188, 226));
-                text(m_content, detail[i], x, 239, 124, 38, ccc3(145, 162, 214));
-                button(m_content, i == m_selectedMode ? "SELECTED" : "SELECT",
-                       x, 192, 122, 32, 210 + i, true, false, i == m_selectedMode ? 3 : 0);
+                const float x = 430.f;
+                const float y = rowY[i];
+                const float w = 446.f;
+                const float h = 58.f;
+                const auto accent = modeColors[i];
+                const bool selected = m_selectedMode == i;
+
+                // One long capsule per mode: all text and its custom value live inside it.
+                auto shadow = CCDrawNode::create();
+                if (shadow) {
+                    shadow->setPosition({x + 2.f, y - 4.f});
+                    drawPill(shadow, w + 8.f, h + 8.f, ccc4f(.002f, .004f, .018f, .92f));
+                    m_content->addChild(shadow, 1);
+                }
+                auto rim = CCDrawNode::create();
+                if (rim) {
+                    rim->setPosition({x, y});
+                    drawPill(rim, w + 4.f, h + 4.f,
+                             selected ? ccc4f(accent.r, accent.g, accent.b, .98f)
+                                      : ccc4f(.34f, .43f, .65f, .96f));
+                    m_content->addChild(rim, 2);
+                }
+                auto plate = CCDrawNode::create();
+                if (plate) {
+                    plate->setPosition({x, y});
+                    drawPill(plate, w, h,
+                             selected ? ccc4f(.075f, .105f, .205f, .99f)
+                                      : ccc4f(.035f, .055f, .115f, .99f));
+                    m_content->addChild(plate, 3);
+                }
+
+                // Left accent and mode label.
+                auto marker = CCDrawNode::create();
+                if (marker) {
+                    marker->drawDot({0, 0}, 4.2f, accent);
+                    marker->drawDot({0, 0}, 8.2f,
+                                    ccc4f(accent.r, accent.g, accent.b, selected ? .18f : .10f));
+                    marker->setPosition({x - 187.f, y});
+                    m_content->addChild(marker, 5);
+                    marker->runAction(CCRepeatForever::create(CCSequence::create(
+                        CCEaseSineInOut::create(CCScaleTo::create(1.1f, 1.18f)),
+                        CCEaseSineInOut::create(CCScaleTo::create(1.1f, .92f)), nullptr)));
+                }
+                text(m_content, modeNames[i], x - 132.f, y + 7.f, 112.f, 18.f,
+                     selected ? ccc3(244, 241, 255) : ccc3(190, 204, 235),
+                     "bigFont.fnt", .60f);
+                text(m_content, modeInfo[i], x - 132.f, y - 12.f, 122.f, 10.f,
+                     ccc3(117, 151, 199), "bigFont.fnt", .34f);
+
+                // The value sits inside its own inset capsule, still inside the main mode pill.
+                auto valueSlotRim = CCDrawNode::create();
+                if (valueSlotRim) {
+                    valueSlotRim->setPosition({x + 73.f, y});
+                    drawPill(valueSlotRim, 122.f, 39.f,
+                             ccc4f(.34f, .48f, .75f, selected ? .90f : .64f));
+                    m_content->addChild(valueSlotRim, 5);
+                }
+                auto valueSlot = CCDrawNode::create();
+                if (valueSlot) {
+                    valueSlot->setPosition({x + 73.f, y});
+                    drawPill(valueSlot, 118.f, 35.f, ccc4f(.025f, .04f, .09f, .99f));
+                    m_content->addChild(valueSlot, 6);
+                }
+                text(m_content, "CUSTOM", x + 73.f, y + 10.f, 92.f, 9.f,
+                     ccc3(117, 157, 213), "bigFont.fnt", .32f);
+                text(m_content, std::to_string(s_modeTicks[i]) + " FRAMES", x + 73.f, y - 5.f,
+                     104.f, 14.f, ccc3(235, 241, 255), "bigFont.fnt", .46f);
+
+                // Small capsule steppers are placed inside the main pill, not outside it.
+                button(m_content, "-", x + 169.f, y, 31.f, 29.f,
+                       220 + i * 2, true, false, selected ? 3 : 0);
+                button(m_content, "+", x + 207.f, y, 31.f, 29.f,
+                       221 + i * 2, true, false, selected ? 3 : 0);
             }
-            text(m_content, "The engine remains capped at 60 ticks in every profile.",
-                 430, 125, 430, 27, ccc3(142, 167, 226));
+            text(m_content, "SELECT A MODE AND SET ITS CUSTOM FRAME VALUE", 430, 49, 430, 16,
+                 ccc3(125, 151, 198), "bigFont.fnt", .36f);
         } else if (m_selected == 2) {
             text(m_content, "Choose a stage profile. Each option has its own settings card.",
                  430, 326, 430, 26, ccc3(142, 167, 226));
@@ -810,8 +886,14 @@ class FloweristOverlay final : public CCLayer {
             } else { FreeConsole(); s_consoleVisible = false; }
         } else if (tag >= 200 && tag < 206) {
             m_selectedStage = tag - 200;
-        } else if (tag >= 210 && tag < 213) {
-            m_selectedMode = tag - 210;
+        } else if (tag >= 220 && tag < 226) {
+            const int mode = (tag - 220) / 2;
+            const bool increase = ((tag - 220) % 2) == 1;
+            m_selectedMode = mode;
+            const int step = increase ? 1 : -1;
+            s_modeTicks[mode] = std::clamp(s_modeTicks[mode] + step, 0, 60);
+            buildContent();
+            return;
         } else if (tag == 102) {
             m_animated = !m_animated;
         } else if (tag == 101) {
