@@ -284,7 +284,7 @@ void drawGamemodeIcon(CCNode* parent, int mode, CCPoint at, ccColor4F tint) {
     auto icon = CCDrawNode::create();
     if (!icon) return;
     const float t = 2.0f;
-    auto line = [&](CCPoint a, CCPoint b, float width = t) {
+auto line = [&](CCPoint a, CCPoint b, float width = 2.0f) {
         icon->drawSegment(a, b, width, tint);
     };
     switch (mode) {
