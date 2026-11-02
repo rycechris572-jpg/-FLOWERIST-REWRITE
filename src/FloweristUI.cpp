@@ -1024,6 +1024,10 @@ public:
         m_selectedStage = virgo::selectedStage;
         m_quiet = virgo::quietMode;
         m_animated = virgo::animationsEnabled;
+        virgo::loadSettings();
+        m_selectedStage = virgo::selectedStage;
+        m_quiet = virgo::quietMode;
+        m_animated = virgo::animationsEnabled;
         // Capture first, then route clicks to our own controls. No CCMenu items
         // are used, so the catch layer can reliably swallow clicks over the UI.
         setTouchEnabled(true);
