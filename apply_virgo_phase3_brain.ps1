@@ -22,7 +22,7 @@ function Replace-OnceB64([string]$Source, [string]$OldB64, [string]$NewB64, [str
             Write-Host "Already applied: $Label"
             return $Source
         }
-        throw "Patch stopped safely at $Label: expected one source match, found 0. No source files were written."
+       throw "Patch stopped safely at ${Label}: expected one source match, found 0. No source files were written."
     }
     if ($count -ne 1) { throw "Patch stopped safely at $Label: expected one source match, found $count. No source files were written." }
     Write-Host "Applying: $Label"
