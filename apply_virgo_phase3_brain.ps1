@@ -1,9 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 function Read-TextLF([string]$Path) {
-    if (-not (Test-Path -LiteralPath $Path)) {
-        throw "Required source file not found: $Path"
-    }
+    if (-not (Test-Path -LiteralPath $Path)) { throw "Required source file not found: $Path" }
     return ([System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Path))).Replace("`r`n", "`n").Replace("`r", "`n")
 }
 
@@ -12,297 +10,48 @@ function Write-TextLF([string]$Path, [string]$Content) {
     [System.IO.File]::WriteAllText($fullPath, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
-function Normalize-LF([string]$Text) {
-    return $Text.Replace("`r`n", "`n").Replace("`r", "`n")
-}
-
-function Replace-Once([string]$Source, [string]$Old, [string]$New, [string]$Label) {
-    # PowerShell here-strings preserve the script file's line endings. Normalize
-    # both here-string anchors and source text so CRLF checkouts match LF anchors.
-    $Source = Normalize-LF $Source
-    $Old = Normalize-LF $Old
-    $New = Normalize-LF $New
+function Replace-OnceB64([string]$Source, [string]$OldB64, [string]$NewB64, [string]$Label) {
+    $Source = $Source.Replace("`r`n", "`n").Replace("`r", "`n")
+    $Old = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($OldB64))
+    $New = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($NewB64))
+    $Old = $Old.Replace("`r`n", "`n").Replace("`r", "`n")
+    $New = $New.Replace("`r`n", "`n").Replace("`r", "`n")
     $count = [regex]::Matches($Source, [regex]::Escape($Old)).Count
     if ($count -eq 0) {
-        $alreadyCount = [regex]::Matches($Source, [regex]::Escape($New)).Count
-        if ($alreadyCount -eq 1) {
+        if ([regex]::Matches($Source, [regex]::Escape($New)).Count -eq 1) {
             Write-Host "Already applied: $Label"
             return $Source
         }
-        throw "Patch stopped safely at '$Label': expected one source match, found 0. No further files will be changed."
+        throw "Patch stopped safely at $Label: expected one source match, found 0. No source files were written."
     }
-    if ($count -ne 1) {
-        throw "Patch stopped safely at '$Label': expected one source match, found $count. No further files will be changed."
-    }
+    if ($count -ne 1) { throw "Patch stopped safely at $Label: expected one source match, found $count. No source files were written." }
     Write-Host "Applying: $Label"
     return $Source.Replace($Old, $New)
 }
 
-# -----------------------------------------------------------------------------
-# 1. Persistent Brain telemetry in VirgoShared.hpp
-# -----------------------------------------------------------------------------
-$sharedPath = "src/VirgoShared.hpp"
-$shared = Read-TextLF $sharedPath
+# Read every target first; no source is written unless all anchors validate.
+$shared = Read-TextLF "src/VirgoShared.hpp"
+$main = Read-TextLF "src/main.cpp"
+$ui = Read-TextLF "src/FloweristUI.cpp"
 
-$oldInclude = @'
-#pragma once
-#include <array>
-'@
-$newInclude = @'
-#pragma once
-#include <Geode/Geode.hpp>
-#include <array>
-#include <string>
-'@
-$shared = Replace-Once $shared $oldInclude $newInclude "add Geode saved-data support"
+$shared = Replace-OnceB64 $shared "I2luY2x1ZGUgPEdlb2RlL0dlb2RlLmhwcD4KI2luY2x1ZGUgPGFycmF5Pgo=" "I2luY2x1ZGUgPEdlb2RlL0dlb2RlLmhwcD4KI2luY2x1ZGUgPGFsZ29yaXRobT4KI2luY2x1ZGUgPGFycmF5Pgo=" "include algorithm for bounded preference loading"
+$shared = Replace-OnceB64 $shared "aW5saW5lIHN0ZDo6YXJyYXk8aW50LCAzPiBtb2RlRnJhbWVzID0gezIsIDIsIDJ9Owo=" "aW5saW5lIHN0ZDo6YXJyYXk8aW50LCAzPiBtb2RlRnJhbWVzID0gezIsIDIsIDJ9OwoKLy8gUGVyc2lzdGVudCB1c2VyIHByZWZlcmVuY2VzLiBBdXRvcGxheSBmaWVsZHMgYXJlIHN0b3JlZCBub3cgc28gZnV0dXJlCi8vIEJyYWluL0F1dG9wbGF5IGNvbnRyb2xzIGNhbiB1c2UgdGhlIHNhbWUgc2F2ZSBzeXN0ZW0gd2hlbiB0aG9zZSBmZWF0dXJlcyBsYW5kLgppbmxpbmUgYm9vbCBzZXR0aW5nc0xvYWRlZCA9IGZhbHNlOwppbmxpbmUgYm9vbCBidWZmZXJFbmFibGVkID0gdHJ1ZTsKaW5saW5lIGludCBidWZmZXJQcmVzZXRJbmRleCA9IDA7CmlubGluZSBpbnQgc2VsZWN0ZWRTdGFnZSA9IDA7CmlubGluZSBib29sIHF1aWV0TW9kZSA9IGZhbHNlOwppbmxpbmUgYm9vbCBhbmltYXRpb25zRW5hYmxlZCA9IHRydWU7CmlubGluZSBib29sIGJyYWluTGVhcm5pbmdFbmFibGVkID0gdHJ1ZTsKaW5saW5lIGJvb2wgYnJhaW5MZXNzb25zRW5hYmxlZCA9IHRydWU7CmlubGluZSBib29sIGJyYWluQXV0b1R1bmVFbmFibGVkID0gZmFsc2U7CmlubGluZSBpbnQgYnJhaW5BdXRvVHVuZU1vZGUgPSAxOyAvLyAwID0gTGlnaHQsIDEgPSBNZWRpdW0sIDIgPSBBZ2dyZXNzaXZlCmlubGluZSBib29sIGF1dG9QbGF5RW5hYmxlZCA9IGZhbHNlOwppbmxpbmUgaW50IGF1dG9QbGF5TW9kZSA9IDA7ICAgICAvLyAwID0gTm9ybWFsLCAxID0gUHJhY3RpY2UKaW5saW5lIGludCBhdXRvUGxheVByZXNldCA9IC0xOyAgLy8gLTEgPSBubyBwcmVzZXQgc2VsZWN0ZWQK" "add persistent preferences and reserved Brain/Autoplay settings"
+$shared = Replace-OnceB64 $shared "aW5saW5lIGNvbnN0ZXhwciBzdGQ6OmFycmF5PGNvbnN0IGNoYXIqLCBNb2RlQ291bnQ+IG1vZGVTYXZlS2V5cyA9IHsKICAgICJjdWJlIiwgIndhdmUiLCAic2hpcCIsICJiYWxsIiwgInVmbyIsICJyb2JvdCIsICJzcGlkZXIiLCAic3dpbmciCn07Cg==" "aW5saW5lIGNvbnN0ZXhwciBzdGQ6OmFycmF5PGNvbnN0IGNoYXIqLCBNb2RlQ291bnQ+IG1vZGVTYXZlS2V5cyA9IHsKICAgICJjdWJlIiwgIndhdmUiLCAic2hpcCIsICJiYWxsIiwgInVmbyIsICJyb2JvdCIsICJzcGlkZXIiLCAic3dpbmciCn07CgppbmxpbmUgdm9pZCBsb2FkU2V0dGluZ3MoKSB7CiAgICBpZiAoc2V0dGluZ3NMb2FkZWQpIHJldHVybjsKICAgIGF1dG8qIG1vZCA9IGdlb2RlOjpNb2Q6OmdldCgpOwogICAgaWYgKCFtb2QpIHJldHVybjsKCiAgICBmb3IgKGludCBpID0gMDsgaSA8IE1vZGVDb3VudDsgKytpKSB7CiAgICAgICAgY29uc3QgYXV0byBpbmRleCA9IHN0YXRpY19jYXN0PHN0ZDo6c2l6ZV90PihpKTsKICAgICAgICBjb25zdCBzdGQ6OnN0cmluZyBtb2RlID0gbW9kZVNhdmVLZXlzW2luZGV4XTsKICAgICAgICBtb2RlRW5hYmxlZFtpbmRleF0gPSBtb2QtPmdldFNhdmVkVmFsdWU8Ym9vbD4oc3RkOjpzdHJpbmcoInNldHRpbmdzLm1vZGUuZW5hYmxlZC4iKSArIG1vZGUsIG1vZGVFbmFibGVkW2luZGV4XSk7CiAgICB9CgogICAgbW9kZUZyYW1lc1tDdWJlXSA9IHN0ZDo6Y2xhbXAobW9kLT5nZXRTYXZlZFZhbHVlPGludD4oInNldHRpbmdzLmZyYW1lcy5jdWJlIiwgbW9kZUZyYW1lc1tDdWJlXSksIDAsIDYwKTsKICAgIG1vZGVGcmFtZXNbV2F2ZV0gPSBzdGQ6OmNsYW1wKG1vZC0+Z2V0U2F2ZWRWYWx1ZTxpbnQ+KCJzZXR0aW5ncy5mcmFtZXMud2F2ZSIsIG1vZGVGcmFtZXNbV2F2ZV0pLCAwLCA2MCk7CiAgICBtb2RlRnJhbWVzW1NoaXBdID0gc3RkOjpjbGFtcChtb2QtPmdldFNhdmVkVmFsdWU8aW50Pigic2V0dGluZ3MuZnJhbWVzLnNoaXAiLCBtb2RlRnJhbWVzW1NoaXBdKSwgMCwgNjApOwoKICAgIGJ1ZmZlckVuYWJsZWQgPSBtb2QtPmdldFNhdmVkVmFsdWU8Ym9vbD4oInNldHRpbmdzLmJ1ZmZlci5lbmFibGVkIiwgYnVmZmVyRW5hYmxlZCk7CiAgICBidWZmZXJQcmVzZXRJbmRleCA9IHN0ZDo6Y2xhbXAobW9kLT5nZXRTYXZlZFZhbHVlPGludD4oInNldHRpbmdzLmJ1ZmZlci5wcmVzZXQiLCBidWZmZXJQcmVzZXRJbmRleCksIDAsIDkpOwogICAgc2VsZWN0ZWRTdGFnZSA9IHN0ZDo6Y2xhbXAobW9kLT5nZXRTYXZlZFZhbHVlPGludD4oInNldHRpbmdzLnN0YWdlLnNlbGVjdGVkIiwgc2VsZWN0ZWRTdGFnZSksIDAsIDUpOwogICAgcXVpZXRNb2RlID0gbW9kLT5nZXRTYXZlZFZhbHVlPGJvb2w+KCJzZXR0aW5ncy51aS5xdWlldCIsIHF1aWV0TW9kZSk7CiAgICBhbmltYXRpb25zRW5hYmxlZCA9IG1vZC0+Z2V0U2F2ZWRWYWx1ZTxib29sPigic2V0dGluZ3MudWkuYW5pbWF0aW9ucyIsIGFuaW1hdGlvbnNFbmFibGVkKTsKCiAgICBicmFpbkxlYXJuaW5nRW5hYmxlZCA9IG1vZC0+Z2V0U2F2ZWRWYWx1ZTxib29sPigic2V0dGluZ3MuYnJhaW4ubGVhcm5pbmciLCBicmFpbkxlYXJuaW5nRW5hYmxlZCk7CiAgICBicmFpbkxlc3NvbnNFbmFibGVkID0gbW9kLT5nZXRTYXZlZFZhbHVlPGJvb2w+KCJzZXR0aW5ncy5icmFpbi5sZXNzb25zIiwgYnJhaW5MZXNzb25zRW5hYmxlZCk7CiAgICBicmFpbkF1dG9UdW5lRW5hYmxlZCA9IG1vZC0+Z2V0U2F2ZWRWYWx1ZTxib29sPigic2V0dGluZ3MuYnJhaW4uYXV0b3R1bmUuZW5hYmxlZCIsIGJyYWluQXV0b1R1bmVFbmFibGVkKTsKICAgIGJyYWluQXV0b1R1bmVNb2RlID0gc3RkOjpjbGFtcChtb2QtPmdldFNhdmVkVmFsdWU8aW50Pigic2V0dGluZ3MuYnJhaW4uYXV0b3R1bmUubW9kZSIsIGJyYWluQXV0b1R1bmVNb2RlKSwgMCwgMik7CgogICAgYXV0b1BsYXlFbmFibGVkID0gbW9kLT5nZXRTYXZlZFZhbHVlPGJvb2w+KCJzZXR0aW5ncy5hdXRvcGxheS5lbmFibGVkIiwgYXV0b1BsYXlFbmFibGVkKTsKICAgIGF1dG9QbGF5TW9kZSA9IHN0ZDo6Y2xhbXAobW9kLT5nZXRTYXZlZFZhbHVlPGludD4oInNldHRpbmdzLmF1dG9wbGF5Lm1vZGUiLCBhdXRvUGxheU1vZGUpLCAwLCAxKTsKICAgIGF1dG9QbGF5UHJlc2V0ID0gc3RkOjpjbGFtcChtb2QtPmdldFNhdmVkVmFsdWU8aW50Pigic2V0dGluZ3MuYXV0b3BsYXkucHJlc2V0IiwgYXV0b1BsYXlQcmVzZXQpLCAtMSwgMyk7CgogICAgc2V0dGluZ3NMb2FkZWQgPSB0cnVlOwp9CgppbmxpbmUgdm9pZCBzYXZlU2V0dGluZ3MoKSB7CiAgICBsb2FkU2V0dGluZ3MoKTsKICAgIGF1dG8qIG1vZCA9IGdlb2RlOjpNb2Q6OmdldCgpOwogICAgaWYgKCFtb2QgfHwgIXNldHRpbmdzTG9hZGVkKSByZXR1cm47CgogICAgZm9yIChpbnQgaSA9IDA7IGkgPCBNb2RlQ291bnQ7ICsraSkgewogICAgICAgIGNvbnN0IGF1dG8gaW5kZXggPSBzdGF0aWNfY2FzdDxzdGQ6OnNpemVfdD4oaSk7CiAgICAgICAgbW9kLT5zZXRTYXZlZFZhbHVlPGJvb2w+KHN0ZDo6c3RyaW5nKCJzZXR0aW5ncy5tb2RlLmVuYWJsZWQuIikgKyBtb2RlU2F2ZUtleXNbaW5kZXhdLCBtb2RlRW5hYmxlZFtpbmRleF0pOwogICAgfQoKICAgIG1vZC0+c2V0U2F2ZWRWYWx1ZTxpbnQ+KCJzZXR0aW5ncy5mcmFtZXMuY3ViZSIsIG1vZGVGcmFtZXNbQ3ViZV0pOwogICAgbW9kLT5zZXRTYXZlZFZhbHVlPGludD4oInNldHRpbmdzLmZyYW1lcy53YXZlIiwgbW9kZUZyYW1lc1tXYXZlXSk7CiAgICBtb2QtPnNldFNhdmVkVmFsdWU8aW50Pigic2V0dGluZ3MuZnJhbWVzLnNoaXAiLCBtb2RlRnJhbWVzW1NoaXBdKTsKICAgIG1vZC0+c2V0U2F2ZWRWYWx1ZTxib29sPigic2V0dGluZ3MuYnVmZmVyLmVuYWJsZWQiLCBidWZmZXJFbmFibGVkKTsKICAgIG1vZC0+c2V0U2F2ZWRWYWx1ZTxpbnQ+KCJzZXR0aW5ncy5idWZmZXIucHJlc2V0IiwgYnVmZmVyUHJlc2V0SW5kZXgpOwogICAgbW9kLT5zZXRTYXZlZFZhbHVlPGludD4oInNldHRpbmdzLnN0YWdlLnNlbGVjdGVkIiwgc2VsZWN0ZWRTdGFnZSk7CiAgICBtb2QtPnNldFNhdmVkVmFsdWU8Ym9vbD4oInNldHRpbmdzLnVpLnF1aWV0IiwgcXVpZXRNb2RlKTsKICAgIG1vZC0+c2V0U2F2ZWRWYWx1ZTxib29sPigic2V0dGluZ3MudWkuYW5pbWF0aW9ucyIsIGFuaW1hdGlvbnNFbmFibGVkKTsKCiAgICBtb2QtPnNldFNhdmVkVmFsdWU8Ym9vbD4oInNldHRpbmdzLmJyYWluLmxlYXJuaW5nIiwgYnJhaW5MZWFybmluZ0VuYWJsZWQpOwogICAgbW9kLT5zZXRTYXZlZFZhbHVlPGJvb2w+KCJzZXR0aW5ncy5icmFpbi5sZXNzb25zIiwgYnJhaW5MZXNzb25zRW5hYmxlZCk7CiAgICBtb2QtPnNldFNhdmVkVmFsdWU8Ym9vbD4oInNldHRpbmdzLmJyYWluLmF1dG90dW5lLmVuYWJsZWQiLCBicmFpbkF1dG9UdW5lRW5hYmxlZCk7CiAgICBtb2QtPnNldFNhdmVkVmFsdWU8aW50Pigic2V0dGluZ3MuYnJhaW4uYXV0b3R1bmUubW9kZSIsIGJyYWluQXV0b1R1bmVNb2RlKTsKCiAgICBtb2QtPnNldFNhdmVkVmFsdWU8Ym9vbD4oInNldHRpbmdzLmF1dG9wbGF5LmVuYWJsZWQiLCBhdXRvUGxheUVuYWJsZWQpOwogICAgbW9kLT5zZXRTYXZlZFZhbHVlPGludD4oInNldHRpbmdzLmF1dG9wbGF5Lm1vZGUiLCBhdXRvUGxheU1vZGUpOwogICAgbW9kLT5zZXRTYXZlZFZhbHVlPGludD4oInNldHRpbmdzLmF1dG9wbGF5LnByZXNldCIsIGF1dG9QbGF5UHJlc2V0KTsKfQo=" "add load/save functions for Brain, Autoplay, buffer and UI preferences"
+$main = Replace-OnceB64 $main "ICAgIHZvaWQgaW5pdCgpIHsKICAgICAgICBQbGF5TGF5ZXIqIHBsID0gUGxheUxheWVyOjpnZXQoKTsK" "ICAgIHZvaWQgaW5pdCgpIHsKICAgICAgICB2aXJnbzo6bG9hZFNldHRpbmdzKCk7CiAgICAgICAgdmlyZ286OmxvYWRCcmFpbkRhdGEoKTsKICAgICAgICBQbGF5TGF5ZXIqIHBsID0gUGxheUxheWVyOjpnZXQoKTsK" "load saved preferences before initializing the input engine"
+$main = Replace-OnceB64 $main "ICAgICAgICBtX3NpbVBsYXllcjEgPSBjcmVhdGVUcmFqZWN0b3J5UGxheWVyKCk7CiAgICAgICAgbV9zaW1QbGF5ZXIyID0gY3JlYXRlVHJhamVjdG9yeVBsYXllcigpOwogICAgICAgIG1fbWF4VGlja3NOb3JtYWwgPSBzdGQ6OmNsYW1wKHZpcmdvOjptb2RlRnJhbWVzW3ZpcmdvOjpDdWJlXSwgMCwgTUFYX0JVRkZFUl9USUNLUyk7Cg==" "ICAgICAgICBtX3NpbVBsYXllcjEgPSBjcmVhdGVUcmFqZWN0b3J5UGxheWVyKCk7CiAgICAgICAgbV9zaW1QbGF5ZXIyID0gY3JlYXRlVHJhamVjdG9yeVBsYXllcigpOwogICAgICAgIG1fZW5hYmxlZCA9IHZpcmdvOjpidWZmZXJFbmFibGVkOwogICAgICAgIG1fcHJlc2V0SW5kZXggPSBzdGQ6OmNsYW1wKHZpcmdvOjpidWZmZXJQcmVzZXRJbmRleCwgMCwgOSk7CiAgICAgICAgbV9tYXhUaWNrc05vcm1hbCA9IHN0ZDo6Y2xhbXAodmlyZ286Om1vZGVGcmFtZXNbdmlyZ286OkN1YmVdLCAwLCBNQVhfQlVGRkVSX1RJQ0tTKTsK" "restore buffer enabled state and F6 preset"
+$main = Replace-OnceB64 $main "ICAgICAgICB2aXJnbzo6bW9kZUZyYW1lc1t2aXJnbzo6Q3ViZV0gPSBtX21heFRpY2tzTm9ybWFsOwogICAgICAgIHZpcmdvOjptb2RlRnJhbWVzW3ZpcmdvOjpXYXZlXSA9IG1fbWF4VGlja3NXYXZlOwogICAgICAgIHZpcmdvOjptb2RlRnJhbWVzW3ZpcmdvOjpTaGlwXSA9IG1fbWF4VGlja3NOb3JtYWw7CgogICAgICAgIGlmIChtX2VuYWJsZWQpIHsK" "ICAgICAgICB2aXJnbzo6bW9kZUZyYW1lc1t2aXJnbzo6Q3ViZV0gPSBtX21heFRpY2tzTm9ybWFsOwogICAgICAgIHZpcmdvOjptb2RlRnJhbWVzW3ZpcmdvOjpXYXZlXSA9IG1fbWF4VGlja3NXYXZlOwogICAgICAgIHZpcmdvOjptb2RlRnJhbWVzW3ZpcmdvOjpTaGlwXSA9IG1fbWF4VGlja3NOb3JtYWw7CiAgICAgICAgdmlyZ286OmJ1ZmZlckVuYWJsZWQgPSBtX2VuYWJsZWQ7CiAgICAgICAgdmlyZ286OmJ1ZmZlclByZXNldEluZGV4ID0gbV9wcmVzZXRJbmRleDsKICAgICAgICB2aXJnbzo6c2F2ZVNldHRpbmdzKCk7CgogICAgICAgIGlmIChtX2VuYWJsZWQpIHsK" "save F6 buffer preset changes immediately"
+$main = Replace-OnceB64 $main "JG9uX21vZChMb2FkZWQpIHsKICAgIHZpcmdvOjpsb2FkQnJhaW5EYXRhKCk7CiAgICBsb2c6OmluZm8oIlZJUkdPIEJyYWluIGluaXRpYWxpemVkOiBwZXJzaXN0ZW50IHBlci1tb2RlIHRlbGVtZXRyeSBsb2FkZWQuIik7Cn0K" "JG9uX21vZChMb2FkZWQpIHsKICAgIHZpcmdvOjpsb2FkQnJhaW5EYXRhKCk7CiAgICB2aXJnbzo6bG9hZFNldHRpbmdzKCk7CiAgICBsb2c6OmluZm8oIlZJUkdPIEJyYWluIGFuZCB1c2VyIHByZWZlcmVuY2VzIGxvYWRlZCBmcm9tIHNhdmVkIGRhdGEuIik7Cn0K" "load persistent preferences when VIRGO loads"
+$main = Replace-OnceB64 $main "Y29uc3RleHByIGludCBDT0FSU0VfU0NBTl9TQU1QTEVTID0gODs=" "Y29uc3RleHByIGludCBDT0FSU0VfU0NBTl9TQU1QTEVTID0gMTI7IC8vIGRlbnNlciBjb2Fyc2Ugc2NhbiB3aXRob3V0IHJhaXNpbmcgdGhlIDYwLWZyYW1lIGNhcA==" "increase coarse frame-search resolution"
+$main = Replace-OnceB64 $main "ICAgICAgICAvLyBTdGFnZSBBOiBjaGVjayBzaG9ydCBkZWxheXMgcHJlY2lzZWx5LiBTdGFnZSBCOiBzYW1wbGUgbG9uZyBkZWxheXMgc3BhcnNlbHkuCiAgICAgICAgLy8gVGhpcyBib3VuZHMgdGhlIG1vc3QgZXhwZW5zaXZlIHNpbXVsYXRpb24gbG9vcCBhdCAxNiBjYW5kaWRhdGVzL2lucHV0LgogICAgICAgIGNvbnN0IGludCBmaW5lRW5kID0gc3RkOjptaW4obWF4RGVsYXlGcmFtZXMsIEZJTkVfU0NBTl9USUNLUyk7CiAgICAgICAgY29uc3QgaW50IGNvYXJzZVJlbWFpbmluZyA9IHN0ZDo6bWF4KDAsIG1heERlbGF5RnJhbWVzIC0gZmluZUVuZCk7CiAgICAgICAgY29uc3QgaW50IGNvYXJzZVN0cmlkZSA9IGNvYXJzZVJlbWFpbmluZyA+IDAKICAgICAgICAgICAgPyBzdGQ6Om1heCgxLCAoY29hcnNlUmVtYWluaW5nICsgQ09BUlNFX1NDQU5fU0FNUExFUyAtIDEpIC8gQ09BUlNFX1NDQU5fU0FNUExFUykKICAgICAgICAgICAgOiAxOwogICAgICAgIGZvciAoaW50IGRlbGF5ID0gMTsgZGVsYXkgPD0gbWF4RGVsYXlGcmFtZXM7ICkgewogICAgICAgICAgICBpbnQgdGlja3MgPSBnZXRTdXJ2aXZhbFRpY2tzKHBsLCBwMSwgcDIsIGlzRHVhbCwgZGVsYXksIHB1c2gsIHRhcmdldEhvcml6b24pOwoKICAgICAgICAgICAgaWYgKGlzV2F2ZSkgewogICAgICAgICAgICAgICAgLy8gSW4gV2F2ZSBtb2RlLCBkZWxheWluZyBhIHR1cm4gaW5zaWRlIGEgZmxhdCBjb3JyaWRvciBuYXR1cmFsbHkgYWRkcyB+KDIgKiBkZWxheSkKICAgICAgICAgICAgICAgIC8vIHRpY2tzIGFnYWluc3QgdGhlIG9wcG9zaXRlIHdhbGwuIFJlcXVpcmUgYXQgbGVhc3QgKDIgKiBkZWxheSArIDEwKSBleHRyYSB0aWNrcwogICAgICAgICAgICAgICAgLy8gc28gd2UgT05MWSBidWZmZXIgd2hlbiB0aGUgZGVsYXllZCB0cmFqZWN0b3J5IGFjdHVhbGx5IGNsZWFycyBwYXN0IGEgc3Bpa2UsCiAgICAgICAgICAgICAgICAvLyBzYXdibGFkZSwgb3IgY29ybmVyIQogICAgICAgICAgICAgICAgaW50IG1pbkNsZWFyZWRHYWluID0gKGRlbGF5ICogMikgKyAxMDsKICAgICAgICAgICAgICAgIGlmICh0aWNrcyA+PSB0YXJnZXRIb3Jpem9uICYmICh0aWNrcyAtIHRpY2tzRnJhbWUwKSA+PSAoZGVsYXkgKiAyKSArIDYpIHsKICAgICAgICAgICAgICAgICAgICBiZXN0RGVsYXkgPSBkZWxheTsKICAgICAgICAgICAgICAgICAgICBiZXN0VGlja3MgPSB0aWNrczsKICAgICAgICAgICAgICAgICAgICBicmVhazsKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIGlmICh0aWNrcyA+PSB0aWNrc0ZyYW1lMCArIG1pbkNsZWFyZWRHYWluICYmIHRpY2tzID4gYmVzdFRpY2tzICsgMikgewogICAgICAgICAgICAgICAgICAgIGJlc3REZWxheSA9IGRlbGF5OwogICAgICAgICAgICAgICAgICAgIGJlc3RUaWNrcyA9IHRpY2tzOwogICAgICAgICAgICAgICAgICAgIGlmICh0aWNrcyA+PSB0YXJnZXRIb3Jpem9uKSBicmVhazsKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfSBlbHNlIHsKICAgICAgICAgICAgICAgIGlmICh0aWNrcyA+PSB0YXJnZXRIb3Jpem9uKSB7CiAgICAgICAgICAgICAgICAgICAgYmVzdERlbGF5ID0gZGVsYXk7CiAgICAgICAgICAgICAgICAgICAgYmVzdFRpY2tzID0gdGlja3M7CiAgICAgICAgICAgICAgICAgICAgYnJlYWs7CiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICBpZiAodGlja3MgPiBiZXN0VGlja3MgKyAxMikgewogICAgICAgICAgICAgICAgICAgIGJlc3REZWxheSA9IGRlbGF5OwogICAgICAgICAgICAgICAgICAgIGJlc3RUaWNrcyA9IHRpY2tzOwogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9CiAgICAgICAgICAgIGlmIChkZWxheSA8IGZpbmVFbmQpICsrZGVsYXk7CiAgICAgICAgICAgIGVsc2UgaWYgKGRlbGF5ID09IGZpbmVFbmQgJiYgY29hcnNlUmVtYWluaW5nID4gMCkgZGVsYXkgPSBzdGQ6Om1pbihtYXhEZWxheUZyYW1lcywgZmluZUVuZCArIGNvYXJzZVN0cmlkZSk7CiAgICAgICAgICAgIGVsc2UgaWYgKGRlbGF5ID49IG1heERlbGF5RnJhbWVzKSBicmVhazsKICAgICAgICAgICAgZWxzZSBkZWxheSA9IHN0ZDo6bWluKG1heERlbGF5RnJhbWVzLCBkZWxheSArIGNvYXJzZVN0cmlkZSk7CiAgICAgICAgfQo=" "ICAgICAgICAvLyBQaGFzZSAzLjI6IHNjYW4gc2hvcnQgZGVsYXlzIG9uZS1ieS1vbmUsIHNhbXBsZSB0aGUgd2lkZXIgcmFuZ2UgbW9yZSBkZW5zZWx5LAogICAgICAgIC8vIHRoZW4gaW5zcGVjdCB0aGUgZ2FwIGJlZm9yZSB0aGUgZmlyc3QgZnVsbHkgc2FmZSBjb2Fyc2Ugc2FtcGxlLiBUaGUgbWF4aW11bQogICAgICAgIC8vIHJlbWFpbnMgNjAgZnJhbWVzOyB0aGUgZGVuc2VyIHNlYXJjaCBpbXByb3ZlcyB0aW1pbmcgcHJlY2lzaW9uLCBub3QgZGVsYXkgc2l6ZS4KICAgICAgICAvLyBXb3JzdCBjYXNlIGlzIGFwcHJveGltYXRlbHkgMjAgY29hcnNlL2ZpbmUgc2FtcGxlcyBwbHVzIGF0IG1vc3QgNCBnYXAgY2hlY2tzLgogICAgICAgIGNvbnN0IGludCBmaW5lRW5kID0gc3RkOjptaW4obWF4RGVsYXlGcmFtZXMsIEZJTkVfU0NBTl9USUNLUyk7CiAgICAgICAgY29uc3QgaW50IGNvYXJzZVJlbWFpbmluZyA9IHN0ZDo6bWF4KDAsIG1heERlbGF5RnJhbWVzIC0gZmluZUVuZCk7CiAgICAgICAgY29uc3QgaW50IGNvYXJzZVN0cmlkZSA9IGNvYXJzZVJlbWFpbmluZyA+IDAKICAgICAgICAgICAgPyBzdGQ6Om1heCgxLCAoY29hcnNlUmVtYWluaW5nICsgQ09BUlNFX1NDQU5fU0FNUExFUyAtIDEpIC8gQ09BUlNFX1NDQU5fU0FNUExFUykKICAgICAgICAgICAgOiAxOwogICAgICAgIGludCBwcmV2aW91c1Rlc3RlZERlbGF5ID0gMDsKCiAgICAgICAgZm9yIChpbnQgZGVsYXkgPSAxOyBkZWxheSA8PSBtYXhEZWxheUZyYW1lczsgKSB7CiAgICAgICAgICAgIGNvbnN0IGludCB0aWNrcyA9IGdldFN1cnZpdmFsVGlja3MocGwsIHAxLCBwMiwgaXNEdWFsLCBkZWxheSwgcHVzaCwgdGFyZ2V0SG9yaXpvbik7CiAgICAgICAgICAgIGNvbnN0IGJvb2wgZnVsbHlTYWZlID0gaXNXYXZlCiAgICAgICAgICAgICAgICA/ICh0aWNrcyA+PSB0YXJnZXRIb3Jpem9uICYmICh0aWNrcyAtIHRpY2tzRnJhbWUwKSA+PSAoZGVsYXkgKiAyKSArIDYpCiAgICAgICAgICAgICAgICA6ICh0aWNrcyA+PSB0YXJnZXRIb3Jpem9uKTsKCiAgICAgICAgICAgIGlmIChmdWxseVNhZmUpIHsKICAgICAgICAgICAgICAgIGludCBzZWxlY3RlZERlbGF5ID0gZGVsYXk7CiAgICAgICAgICAgICAgICBpbnQgc2VsZWN0ZWRUaWNrcyA9IHRpY2tzOwoKICAgICAgICAgICAgICAgIC8vIENvYXJzZSBzYW1wbGluZyBjYW4ganVtcCBvdmVyIGEgYmV0dGVyIGVhcmxpZXIgZnJhbWUuIFJlZmluZSBvbmx5CiAgICAgICAgICAgICAgICAvLyB0aGF0IHNtYWxsIHVuc2FtcGxlZCBnYXAsIGFuZCBrZWVwIHRoZSBlYXJsaWVzdCBjYW5kaWRhdGUgdGhhdCBjbGVhcnMuCiAgICAgICAgICAgICAgICBmb3IgKGludCByZWZpbmVEZWxheSA9IHByZXZpb3VzVGVzdGVkRGVsYXkgKyAxOyByZWZpbmVEZWxheSA8IGRlbGF5OyArK3JlZmluZURlbGF5KSB7CiAgICAgICAgICAgICAgICAgICAgY29uc3QgaW50IHJlZmluZVRpY2tzID0gZ2V0U3Vydml2YWxUaWNrcygKICAgICAgICAgICAgICAgICAgICAgICAgcGwsIHAxLCBwMiwgaXNEdWFsLCByZWZpbmVEZWxheSwgcHVzaCwgdGFyZ2V0SG9yaXpvbgogICAgICAgICAgICAgICAgICAgICk7CiAgICAgICAgICAgICAgICAgICAgY29uc3QgYm9vbCByZWZpbmVTYWZlID0gaXNXYXZlCiAgICAgICAgICAgICAgICAgICAgICAgID8gKHJlZmluZVRpY2tzID49IHRhcmdldEhvcml6b24gJiYKICAgICAgICAgICAgICAgICAgICAgICAgICAgKHJlZmluZVRpY2tzIC0gdGlja3NGcmFtZTApID49IChyZWZpbmVEZWxheSAqIDIpICsgNikKICAgICAgICAgICAgICAgICAgICAgICAgOiAocmVmaW5lVGlja3MgPj0gdGFyZ2V0SG9yaXpvbik7CiAgICAgICAgICAgICAgICAgICAgaWYgKHJlZmluZVNhZmUpIHsKICAgICAgICAgICAgICAgICAgICAgICAgc2VsZWN0ZWREZWxheSA9IHJlZmluZURlbGF5OwogICAgICAgICAgICAgICAgICAgICAgICBzZWxlY3RlZFRpY2tzID0gcmVmaW5lVGlja3M7CiAgICAgICAgICAgICAgICAgICAgICAgIGJyZWFrOwogICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIH0KCiAgICAgICAgICAgICAgICBiZXN0RGVsYXkgPSBzZWxlY3RlZERlbGF5OwogICAgICAgICAgICAgICAgYmVzdFRpY2tzID0gc2VsZWN0ZWRUaWNrczsKICAgICAgICAgICAgICAgIGJyZWFrOwogICAgICAgICAgICB9CgogICAgICAgICAgICBpZiAoaXNXYXZlKSB7CiAgICAgICAgICAgICAgICAvLyBGb3IgYSBwYXJ0aWFsIFdhdmUgaW1wcm92ZW1lbnQsIGtlZXAgdGhlIGV4aXN0aW5nIGdhaW4gdGhyZXNob2xkLgogICAgICAgICAgICAgICAgY29uc3QgaW50IG1pbkNsZWFyZWRHYWluID0gKGRlbGF5ICogMikgKyAxMDsKICAgICAgICAgICAgICAgIGlmICh0aWNrcyA8IHRhcmdldEhvcml6b24gJiYgdGlja3MgPj0gdGlja3NGcmFtZTAgKyBtaW5DbGVhcmVkR2FpbiAmJgogICAgICAgICAgICAgICAgICAgIHRpY2tzID4gYmVzdFRpY2tzICsgMikgewogICAgICAgICAgICAgICAgICAgIGJlc3REZWxheSA9IGRlbGF5OwogICAgICAgICAgICAgICAgICAgIGJlc3RUaWNrcyA9IHRpY2tzOwogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9IGVsc2UgaWYgKHRpY2tzID4gYmVzdFRpY2tzICsgMTIpIHsKICAgICAgICAgICAgICAgIC8vIEtlZXAgdGhlIGV4aXN0aW5nIG5vbi1XYXZlIHBhcnRpYWwtc3Vydml2YWwgZmFsbGJhY2suCiAgICAgICAgICAgICAgICBiZXN0RGVsYXkgPSBkZWxheTsKICAgICAgICAgICAgICAgIGJlc3RUaWNrcyA9IHRpY2tzOwogICAgICAgICAgICB9CgogICAgICAgICAgICBwcmV2aW91c1Rlc3RlZERlbGF5ID0gZGVsYXk7CiAgICAgICAgICAgIGlmIChkZWxheSA8IGZpbmVFbmQpICsrZGVsYXk7CiAgICAgICAgICAgIGVsc2UgaWYgKGRlbGF5ID09IGZpbmVFbmQgJiYgY29hcnNlUmVtYWluaW5nID4gMCkgZGVsYXkgPSBzdGQ6Om1pbihtYXhEZWxheUZyYW1lcywgZmluZUVuZCArIGNvYXJzZVN0cmlkZSk7CiAgICAgICAgICAgIGVsc2UgaWYgKGRlbGF5ID49IG1heERlbGF5RnJhbWVzKSBicmVhazsKICAgICAgICAgICAgZWxzZSBkZWxheSA9IHN0ZDo6bWluKG1heERlbGF5RnJhbWVzLCBkZWxheSArIGNvYXJzZVN0cmlkZSk7CiAgICAgICAgfQo=" "refine candidate frame gaps while preserving safe-delay rules"
+$ui = Replace-OnceB64 $ui "ICAgIHZvaWQgYnVpbGRDb250ZW50KCkgewogICAgICAgIHZpcmdvOjpsb2FkQnJhaW5EYXRhKCk7CiAgICAgICAgY2xlYXJQYWdlSGl0cygpOwo=" "ICAgIHZvaWQgYnVpbGRDb250ZW50KCkgewogICAgICAgIHZpcmdvOjpsb2FkQnJhaW5EYXRhKCk7CiAgICAgICAgdmlyZ286OmxvYWRTZXR0aW5ncygpOwogICAgICAgIGNsZWFyUGFnZUhpdHMoKTsK" "load persisted settings before drawing the GUI"
+$ui = Replace-OnceB64 $ui "ICAgIGJvb2wgaW5pdCgpIG92ZXJyaWRlIHsKICAgICAgICBpZiAoIUNDTGF5ZXI6OmluaXQoKSkgcmV0dXJuIGZhbHNlOwo=" "ICAgIGJvb2wgaW5pdCgpIG92ZXJyaWRlIHsKICAgICAgICBpZiAoIUNDTGF5ZXI6OmluaXQoKSkgcmV0dXJuIGZhbHNlOwogICAgICAgIHZpcmdvOjpsb2FkU2V0dGluZ3MoKTsKICAgICAgICBtX3NlbGVjdGVkU3RhZ2UgPSB2aXJnbzo6c2VsZWN0ZWRTdGFnZTsKICAgICAgICBtX3F1aWV0ID0gdmlyZ286OnF1aWV0TW9kZTsKICAgICAgICBtX2FuaW1hdGVkID0gdmlyZ286OmFuaW1hdGlvbnNFbmFibGVkOwo=" "restore the selected stage and UI preferences when opening the GUI"
+$ui = Replace-OnceB64 $ui "ICAgICAgICAgICAgaWYgKG1fc2VsZWN0ZWRTdGFnZSA8IDUpIHsKICAgICAgICAgICAgICAgIGZvciAoaW50IGkgPSAwOyBpIDwgMzsgKytpKSB2aXJnbzo6bW9kZUZyYW1lc1tpXSA9IHN0YWdlRnJhbWVzW21fc2VsZWN0ZWRTdGFnZV1baV07CiAgICAgICAgICAgIH0KICAgICAgICB9IGVsc2UgaWYgKHRhZyA+PSAyMjAgJiYgdGFnIDwgMjI2KSB7Cg==" "ICAgICAgICAgICAgaWYgKG1fc2VsZWN0ZWRTdGFnZSA8IDUpIHsKICAgICAgICAgICAgICAgIGZvciAoaW50IGkgPSAwOyBpIDwgMzsgKytpKSB2aXJnbzo6bW9kZUZyYW1lc1tpXSA9IHN0YWdlRnJhbWVzW21fc2VsZWN0ZWRTdGFnZV1baV07CiAgICAgICAgICAgIH0KICAgICAgICAgICAgdmlyZ286OnNlbGVjdGVkU3RhZ2UgPSBtX3NlbGVjdGVkU3RhZ2U7CiAgICAgICAgICAgIHZpcmdvOjpzYXZlU2V0dGluZ3MoKTsKICAgICAgICB9IGVsc2UgaWYgKHRhZyA+PSAyMjAgJiYgdGFnIDwgMjI2KSB7Cg==" "save stage profile selections immediately"
+$ui = Replace-OnceB64 $ui "ICAgICAgICAgICAgdmlyZ286Om1vZGVGcmFtZXNbbW9kZV0gPSBzdGQ6OmNsYW1wKHZpcmdvOjptb2RlRnJhbWVzW21vZGVdICsgc3RlcCwgMCwgNjApOwogICAgICAgICAgICBidWlsZENvbnRlbnQoKTsK" "ICAgICAgICAgICAgdmlyZ286Om1vZGVGcmFtZXNbbW9kZV0gPSBzdGQ6OmNsYW1wKHZpcmdvOjptb2RlRnJhbWVzW21vZGVdICsgc3RlcCwgMCwgNjApOwogICAgICAgICAgICB2aXJnbzo6c2F2ZVNldHRpbmdzKCk7CiAgICAgICAgICAgIGJ1aWxkQ29udGVudCgpOwo=" "save custom frame limits immediately"
+$ui = Replace-OnceB64 $ui "ICAgICAgICAgICAgY29uc3QgaW50IG1vZGUgPSB0YWcgLSAzMDA7CiAgICAgICAgICAgIHZpcmdvOjptb2RlRW5hYmxlZFttb2RlXSA9ICF2aXJnbzo6bW9kZUVuYWJsZWRbbW9kZV07CiAgICAgICAgICAgIGJ1aWxkQ29udGVudCgpOwo=" "ICAgICAgICAgICAgY29uc3QgaW50IG1vZGUgPSB0YWcgLSAzMDA7CiAgICAgICAgICAgIHZpcmdvOjptb2RlRW5hYmxlZFttb2RlXSA9ICF2aXJnbzo6bW9kZUVuYWJsZWRbbW9kZV07CiAgICAgICAgICAgIHZpcmdvOjpzYXZlU2V0dGluZ3MoKTsKICAgICAgICAgICAgYnVpbGRDb250ZW50KCk7Cg==" "save per-mode enable switches immediately"
+$ui = Replace-OnceB64 $ui "ICAgICAgICB9IGVsc2UgaWYgKHRhZyA9PSAxMDIpIHsKICAgICAgICAgICAgbV9hbmltYXRlZCA9ICFtX2FuaW1hdGVkOwogICAgICAgIH0gZWxzZSBpZiAodGFnID09IDEwMSkgewogICAgICAgICAgICBtX3F1aWV0ID0gIW1fcXVpZXQ7Cg==" "ICAgICAgICB9IGVsc2UgaWYgKHRhZyA9PSAxMDIpIHsKICAgICAgICAgICAgbV9hbmltYXRlZCA9ICFtX2FuaW1hdGVkOwogICAgICAgICAgICB2aXJnbzo6YW5pbWF0aW9uc0VuYWJsZWQgPSBtX2FuaW1hdGVkOwogICAgICAgICAgICB2aXJnbzo6c2F2ZVNldHRpbmdzKCk7CiAgICAgICAgfSBlbHNlIGlmICh0YWcgPT0gMTAxKSB7CiAgICAgICAgICAgIG1fcXVpZXQgPSAhbV9xdWlldDsKICAgICAgICAgICAgdmlyZ286OnF1aWV0TW9kZSA9IG1fcXVpZXQ7CiAgICAgICAgICAgIHZpcmdvOjpzYXZlU2V0dGluZ3MoKTsK" "save animation and quiet-mode preferences immediately"
 
-$oldStats = @'
-inline std::array<std::uint64_t, ModeCount> predictionsByMode = {};
-inline std::array<std::uint64_t, ModeCount> safeDelaysByMode = {};
-inline std::array<std::uint64_t, ModeCount> deathsByMode = {};
-}
-'@
-$newStats = @'
-// Brain foundation: real telemetry, persisted by Geode between game sessions.
-inline std::array<std::uint64_t, ModeCount> predictionsByMode = {};
-inline std::array<std::uint64_t, ModeCount> safeDelaysByMode = {};
-inline std::array<std::uint64_t, ModeCount> deathsByMode = {};
-inline bool brainDataLoaded = false;
-
-inline constexpr std::array<const char*, ModeCount> modeSaveKeys = {
-    "cube", "wave", "ship", "ball", "ufo", "robot", "spider", "swing"
-};
-
-inline void loadBrainData() {
-    if (brainDataLoaded) return;
-    auto* mod = geode::Mod::get();
-    if (!mod) return;
-
-    for (int i = 0; i < ModeCount; ++i) {
-        const std::string mode = modeSaveKeys[static_cast<std::size_t>(i)];
-        predictionsByMode[static_cast<std::size_t>(i)] =
-            mod->getSavedValue<std::uint64_t>(std::string("brain.predictions.") + mode, std::uint64_t{0});
-        safeDelaysByMode[static_cast<std::size_t>(i)] =
-            mod->getSavedValue<std::uint64_t>(std::string("brain.safe-delays.") + mode, std::uint64_t{0});
-        deathsByMode[static_cast<std::size_t>(i)] =
-            mod->getSavedValue<std::uint64_t>(std::string("brain.deaths.") + mode, std::uint64_t{0});
-    }
-    brainDataLoaded = true;
-}
-
-inline void recordPrediction(int mode) {
-    loadBrainData();
-    if (!brainDataLoaded || mode < 0 || mode >= ModeCount) return;
-    const auto index = static_cast<std::size_t>(mode);
-    ++predictionsByMode[index];
-    geode::Mod::get()->setSavedValue<std::uint64_t>(
-        std::string("brain.predictions.") + modeSaveKeys[index], predictionsByMode[index]
-    );
-}
-
-inline void recordSafeDelay(int mode) {
-    loadBrainData();
-    if (!brainDataLoaded || mode < 0 || mode >= ModeCount) return;
-    const auto index = static_cast<std::size_t>(mode);
-    ++safeDelaysByMode[index];
-    geode::Mod::get()->setSavedValue<std::uint64_t>(
-        std::string("brain.safe-delays.") + modeSaveKeys[index], safeDelaysByMode[index]
-    );
-}
-
-inline void recordDeath(int mode) {
-    loadBrainData();
-    if (!brainDataLoaded || mode < 0 || mode >= ModeCount) return;
-    const auto index = static_cast<std::size_t>(mode);
-    ++deathsByMode[index];
-    geode::Mod::get()->setSavedValue<std::uint64_t>(
-        std::string("brain.deaths.") + modeSaveKeys[index], deathsByMode[index]
-    );
-}
-
-inline std::uint64_t totalPredictions() {
-    std::uint64_t total = 0;
-    for (auto value : predictionsByMode) total += value;
-    return total;
-}
-
-inline std::uint64_t totalSafeDelays() {
-    std::uint64_t total = 0;
-    for (auto value : safeDelaysByMode) total += value;
-    return total;
-}
-
-inline std::uint64_t totalDeaths() {
-    std::uint64_t total = 0;
-    for (auto value : deathsByMode) total += value;
-    return total;
-}
-}
-'@
-$shared = Replace-Once $shared $oldStats $newStats "install persistent Brain telemetry"
-
-# -----------------------------------------------------------------------------
-# 2. Feed actual engine events into saved Brain telemetry
-# -----------------------------------------------------------------------------
-$mainPath = "src/main.cpp"
-$main = Read-TextLF $mainPath
-
-$oldDeath = @'
-        if (player) ++virgo::deathsByMode[virgoModeIndex(player)];
-'@
-$newDeath = @'
-        if (player) virgo::recordDeath(virgoModeIndex(player));
-'@
-$main = Replace-Once $main $oldDeath $newDeath "record actual player deaths"
-
-$oldPrediction = @'
-        ++virgo::predictionsByMode[telemetryMode];
-'@
-$newPrediction = @'
-        virgo::recordPrediction(telemetryMode);
-'@
-$main = Replace-Once $main $oldPrediction $newPrediction "record prediction attempts"
-
-$oldSafeDelay = @'
-            ++virgo::safeDelaysByMode[telemetryMode];
-'@
-$newSafeDelay = @'
-            virgo::recordSafeDelay(telemetryMode);
-'@
-$main = Replace-Once $main $oldSafeDelay $newSafeDelay "record selected safe delays"
-
-$oldLoaded = @'
-$on_mod(Loaded) {
-    log::info("Flowerist Rewrite loaded; console is opt-in from the LOG tab.");
-}
-'@
-$newLoaded = @'
-$on_mod(Loaded) {
-    virgo::loadBrainData();
-    log::info("VIRGO Brain initialized: persistent per-mode telemetry loaded.");
-}
-'@
-$main = Replace-Once $main $oldLoaded $newLoaded "load saved Brain data on mod startup"
-
-# -----------------------------------------------------------------------------
-# 3. Replace the Competitive page with the Brain / Autoplay dashboard
-# -----------------------------------------------------------------------------
-$uiPath = "src/FloweristUI.cpp"
-$ui = Read-TextLF $uiPath
-
-$oldTabs = @'
-const char* TAB_NAMES[TAB_COUNT] = {"LOGS", "STAGES", "MODES", "ASSISTS", "OPTIMIZATION", "COMPETITIVE"};
-'@
-$newTabs = @'
-const char* TAB_NAMES[TAB_COUNT] = {"LOGS", "STAGES", "MODES", "ASSISTS", "OPTIMIZATION", "BRAIN / AUTO"};
-'@
-$ui = Replace-Once $ui $oldTabs $newTabs "replace Competitive navigation tab"
-
-$oldTabInfo = @'
-const char* TAB_INFO[TAB_COUNT] = {
-    "System status and recent activity",
-    "Choose a stage and tune Cube, Wave and Ship",
-    "Choose which gamemodes use Predictive Input Buffer",
-    "See the active assistance systems",
-    "Tune the interface and performance",
-    "A profile for rule-conscious play"
-};
-'@
-$newTabInfo = @'
-const char* TAB_INFO[TAB_COUNT] = {
-    "System status and recent activity",
-    "Choose a stage and tune Cube, Wave and Ship",
-    "Choose which gamemodes use Predictive Input Buffer",
-    "See the active assistance systems",
-    "Tune the interface and performance",
-    "Persistent learning records and level-aware autoplay"
-};
-'@
-$ui = Replace-Once $ui $oldTabInfo $newTabInfo "update Brain navigation description"
-
-$oldBuildStart = @'
-    void buildContent() {
-        clearPageHits();
-'@
-$newBuildStart = @'
-    void buildContent() {
-        virgo::loadBrainData();
-        clearPageHits();
-'@
-$ui = Replace-Once $ui $oldBuildStart $newBuildStart "load saved Brain records before drawing the dashboard"
-
-$oldSectionTitle = @'
-        sectionTitle(TAB_NAMES[m_selected], TAB_INFO[m_selected]);
-'@
-$newSectionTitle = @'
-        sectionTitle(m_selected == 5 ? "BRAIN / AUTOPLAY" : TAB_NAMES[m_selected], TAB_INFO[m_selected]);
-'@
-$ui = Replace-Once $ui $oldSectionTitle $newSectionTitle "show full Brain and Autoplay page title"
-
-$oldBrainPage = @'
-        } else if (m_selected == 5) {
-            card(m_content, 204, 163, 460, 175, rgba(23, 25, 54, 255));
-            text(m_content, "COMPETITIVE PROFILE", 432, 295, 360, 23, ccc3(221, 202, 255), "goldFont.fnt");
-            text(m_content, "Review the rules of each event before enabling assistance.",
-                 432, 253, 410, 30, ccc3(155, 172, 216));
-            rect(m_content, 231, 226, 402, 1, rgba(95, 108, 159, 130), 6);
-            text(m_content, "This page is a reminder to check event rules, not an anti-cheat bypass.",
-                 432, 203, 410, 32, ccc3(155, 172, 216));
-            text(m_content, "MANUAL PROFILE", 432, 175, 200, 16, ccc3(238, 190, 122));
-        }
-'@
-$newBrainPage = @'
-        } else if (m_selected == 5) {
-            // These are real, persisted engine counters. Grades and IQ remain hidden
-            // until VIRGO has enough level-specific evidence to calculate them honestly.
-            const char* modeNames[virgo::ModeCount] = {
-                "CUBE", "WAVE", "SHIP", "BALL", "UFO", "ROBOT", "SPIDER", "SWING"
-            };
-            card(m_content, 205, 266, 220, 67, rgba(27, 29, 65, 255));
-            card(m_content, 438, 266, 220, 67, rgba(37, 25, 65, 255));
-            text(m_content, "PREDICTION ATTEMPTS", 315, 314, 190, 13,
-                 ccc3(170, 170, 235), "bigFont.fnt", .34f);
-            text(m_content, std::to_string(virgo::totalPredictions()), 315, 289, 190, 22,
-                 ccc3(239, 226, 255), "goldFont.fnt", .66f);
-            text(m_content, "ALL MODES - SAVED DATA", 315, 273, 180, 10,
-                 ccc3(123, 150, 204), "bigFont.fnt", .30f);
-            text(m_content, "SAFE DELAYS SELECTED", 548, 314, 190, 13,
-                 ccc3(170, 170, 235), "bigFont.fnt", .34f);
-            text(m_content, std::to_string(virgo::totalSafeDelays()), 548, 289, 170, 22,
-                 ccc3(239, 226, 255), "goldFont.fnt", .66f);
-            text(m_content, "ALL MODES - SAVED DATA", 548, 273, 180, 10,
-                 ccc3(123, 150, 204), "bigFont.fnt", .30f);
-
-            card(m_content, 205, 65, 453, 187, rgba(23, 26, 55, 255));
-            text(m_content, "MODE MEMORY", 430, 231, 220, 15,
-                 ccc3(220, 204, 255), "goldFont.fnt", .48f);
-            text(m_content, "PRED", 377, 210, 65, 10, ccc3(135, 160, 211), "bigFont.fnt", .31f);
-            text(m_content, "DELAY", 493, 210, 65, 10, ccc3(135, 160, 211), "bigFont.fnt", .31f);
-            text(m_content, "DEATHS", 613, 210, 68, 10, ccc3(135, 160, 211), "bigFont.fnt", .31f);
-
-            for (int mode = 0; mode < virgo::ModeCount; ++mode) {
-                const auto index = static_cast<std::size_t>(mode);
-                const float rowY = 190.f - static_cast<float>(mode) * 16.f;
-                const ccColor3B rowTint = (mode % 2 == 0)
-                    ? ccc3(218, 221, 246) : ccc3(155, 174, 219);
-                text(m_content, modeNames[mode], 249, rowY, 92, 11,
-                     rowTint, "bigFont.fnt", .34f);
-                text(m_content, std::to_string(virgo::predictionsByMode[index]), 377, rowY, 68, 11,
-                     ccc3(219, 229, 255), "bigFont.fnt", .33f);
-                text(m_content, std::to_string(virgo::safeDelaysByMode[index]), 493, rowY, 68, 11,
-                     ccc3(180, 231, 217), "bigFont.fnt", .33f);
-                text(m_content, std::to_string(virgo::deathsByMode[index]), 613, rowY, 68, 11,
-                     ccc3(245, 190, 206), "bigFont.fnt", .33f);
-            }
-            text(m_content, "LEVEL LEARNING + AUTOPLAY: NEXT BRAIN MILESTONE",
-                 430, 44, 440, 12, ccc3(184, 151, 239), "bigFont.fnt", .34f);
-        }
-'@
-$ui = Replace-Once $ui $oldBrainPage $newBrainPage "replace Competitive page with Brain and Autoplay dashboard"
-
-# All source anchors have passed. Only now write the edited files.
-Write-TextLF $sharedPath $shared
-Write-TextLF $mainPath $main
-Write-TextLF $uiPath $ui
-
-Write-Host "VIRGO Phase 3 Brain foundation patch applied."
+# All patches validated. Write the three files only after every anchor passed.
+Write-TextLF "src/VirgoShared.hpp" $shared
+Write-TextLF "src/main.cpp" $main
+Write-TextLF "src/FloweristUI.cpp" $ui
+Write-Host "VIRGO Phase 3.2 frame search and persistent settings patch applied."
