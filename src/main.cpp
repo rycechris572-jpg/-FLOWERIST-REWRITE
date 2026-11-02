@@ -722,9 +722,11 @@ class $modify(BufPlayerObject, PlayerObject) {
             s_sim.onPlayerUpdate(this);
         }
         PlayerObject::update(dt);
-        +
+        if (PlayLayer::get() && !s_sim.isSimulating()) {
             s_sim.setFrameDelta(dt);
+            virgo::brainRecordProgress(getPositionX());
         }
+    }
     }
 
     void ringJump(RingObject* p0, bool p1) {
