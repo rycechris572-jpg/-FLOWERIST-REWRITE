@@ -1,4 +1,5 @@
 name: Build VIRGO (Windows)
+
 on:
   workflow_dispatch:
   push:
@@ -17,23 +18,27 @@ jobs:
         shell: pwsh
         run: ./repair_virgo_phase3_build.ps1
 
+      - name: Apply Nova-style VIRGO UI
+        shell: pwsh
+        run: ./nova_ui_redesign.ps1
+
       - name: Commit repaired source
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/main.cpp src/VirgoShared.hpp
+          git add src/main.cpp src/VirgoShared.hpp src/FloweristUI.cpp
           git diff --cached --quiet
           $diffExit = $LASTEXITCODE
           if ($diffExit -eq 1) {
-            git commit -m "Repair VIRGO Phase 3.3 Brain source"
+            git commit -m "Apply VIRGO Nova UI redesign"
             if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
             git push origin HEAD:${{ github.ref_name }}
             if ($LASTEXITCODE -ne 0) { throw "git push failed" }
           } elseif ($diffExit -ne 0) {
             throw "git diff check failed with exit code $diffExit"
           } else {
-            Write-Host "VIRGO Phase 3.3 source is already repaired."
+            Write-Host "VIRGO source is already up to date."
           }
 
       - name: Build Geode mod
