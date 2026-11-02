@@ -80,7 +80,7 @@ void roundedRect(CCNode* parent, float x, float y, float w, float h, float radiu
 
 CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
                     float maxW, float maxH, ccColor3B tint = ccc3(225, 226, 246),
-                    const char* font = "bigFont.fnt", float maxScale = .40f) {
+                    const char* font = "chatFont.fnt", float maxScale = .40f) {
     // Long descriptions wrap into readable lines. Short labels (including every
     // navigation/tab label) remain single-line and keep their existing styling.
     std::string layout = value;
@@ -122,22 +122,21 @@ CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
 
 void card(CCNode* parent, float x, float y, float w, float h,
           ccColor4B fill = rgba(20, 25, 49, 250)) {
-    // Rounded glass card with a dropped shadow, cool metal rim and inset face.
-    roundedRect(parent, x + 5.f, y - 6.f, w, h, 12.f,
-                ccc4f(.005f, .008f, .025f, .94f), 1);
-    roundedRect(parent, x, y, w, h, 12.f,
-                ccc4f(.43f, .53f, .82f, .96f), 2);
-    roundedRect(parent, x + 1.5f, y + 1.5f, w - 3.f, h - 3.f, 10.f,
-                ccc4f(.025f, .04f, .095f, .99f), 3);
-    roundedRect(parent, x + 3.5f, y + 3.5f, w - 7.f, h - 7.f, 8.f,
-                ccc4f(fill.r / 255.f, fill.g / 255.f, fill.b / 255.f, fill.a / 255.f), 4);
+    (void)fill;
+    // Nova-style surface: quiet plum fill, fine lavender edge, restrained shadow.
+    roundedRect(parent, x + 3.f, y - 4.f, w, h, 13.f,
+                ccc4f(.006f, .004f, .014f, .72f), 1);
+    roundedRect(parent, x, y, w, h, 13.f,
+                ccc4f(.37f, .29f, .49f, .92f), 2);
+    roundedRect(parent, x + 1.2f, y + 1.2f, w - 2.4f, h - 2.4f, 12.f,
+                ccc4f(.055f, .043f, .075f, .99f), 3);
+    roundedRect(parent, x + 2.5f, y + 2.5f, w - 5.f, h - 5.f, 10.f,
+                ccc4f(.078f, .060f, .101f, .99f), 4);
 
     auto glint = CCDrawNode::create();
     if (glint) {
         glint->drawSegment({x + 18.f, y + h - 7.f}, {x + w - 18.f, y + h - 7.f},
-                           1.f, ccc4f(.83f, .90f, 1.f, .24f));
-        glint->drawSegment({x + 10.f, y + 13.f}, {x + 10.f, y + h - 13.f},
-                           .8f, ccc4f(.57f, .76f, 1.f, .20f));
+                           .65f, ccc4f(.83f, .73f, .94f, .16f));
         parent->addChild(glint, 5);
     }
 }
@@ -184,7 +183,7 @@ void drawPill(CCDrawNode* node, float width, float height, ccColor4F color) {
     if (!node) return;
     node->clear();
     // Use a filled polygon with a semicircular end-cap, not a stroked rectangle.
-    auto points = roundedPoints(width, height, height * .5f, 16);
+    auto points = roundedPoints(width, height, height * .18f, 16);
     node->drawPolygon(points.data(), static_cast<unsigned int>(points.size()),
                       color, 0.f, ccc4f(0.f, 0.f, 0.f, 0.f));
 }
@@ -271,7 +270,7 @@ void drawVirgoConstellation(CCNode* parent, CCPoint center, float scale, float a
     }
 
     if (showLabel) {
-        auto label = CCLabelBMFont::create("VIRGO  /  CONSTELLATION", "bigFont.fnt");
+        auto label = CCLabelBMFont::create("VIRGO  /  CONSTELLATION", "chatFont.fnt");
         if (label) {
             label->setScale(.38f * scale / .58f);
             label->setColor(ccc3(151, 193, 238));
@@ -388,11 +387,11 @@ class FloweristOverlay final : public CCLayer {
                 float w, float h, int tag, bool page = false, bool modal = false, int style = 0) {
         // True horizontal capsules: wide oval silhouette, inset rim, soft under-shadow.
         ccColor3B normal = style == 1 ? ccc3(31, 112, 101) :
-                           style == 2 ? ccc3(117, 48, 83) :
-                           style == 3 ? ccc3(75, 91, 164) : ccc3(20, 35, 64);
+                           style == 2 ? ccc3(101, 53, 91) :
+                           style == 3 ? ccc3(91, 67, 119) : ccc3(43, 34, 58);
         ccColor3B hot = style == 1 ? ccc3(54, 222, 177) :
-                        style == 2 ? ccc3(255, 105, 174) :
-                        style == 3 ? ccc3(127, 153, 255) : ccc3(78, 178, 239);
+                        style == 2 ? ccc3(222, 143, 221) :
+                        style == 3 ? ccc3(211, 169, 239) : ccc3(184, 139, 218);
 
         auto shadow = CCDrawNode::create();
         if (shadow) {
@@ -436,7 +435,7 @@ class FloweristOverlay final : public CCLayer {
 
         const bool isTab = !page && !modal && tag >= 0 && tag < TAB_COUNT;
         text(parent, caption, x, y - .2f, w - 20.f, h * .60f,
-             ccc3(246, 249, 255), "bigFont.fnt", isTab ? .78f : .44f);
+             ccc3(246, 249, 255), "chatFont.fnt", isTab ? .78f : .44f);
         m_hits.push_back({tag, {x, y}, w, h, parent, plate, aura, normal, hot, page, modal});
     }
 
@@ -466,9 +465,9 @@ class FloweristOverlay final : public CCLayer {
             parent->addChild(plate, 8);
         }
         text(parent, label, x - 43.f, y, 57.f, 18.f,
-             ccc3(224, 233, 255), "bigFont.fnt", .40f);
+             ccc3(224, 233, 255), "chatFont.fnt", .40f);
         text(parent, std::to_string(virgo::modeFrames[modeId]) + "F", x + 5.f, y,
-             42.f, 18.f, ccc3(248, 250, 255), "goldFont.fnt", .48f);
+             42.f, 18.f, ccc3(248, 250, 255), "chatFont.fnt", .48f);
         button(parent, "-", x + 46.f, y, 19.f, 21.f, 220 + modeId * 2,
                true, false, 3);
         button(parent, "+", x + 67.f, y, 19.f, 21.f, 221 + modeId * 2,
@@ -479,7 +478,7 @@ class FloweristOverlay final : public CCLayer {
         for (auto& hit : m_hits) {
             if (hit.page || hit.modal || hit.space != m_panel || hit.tag < 0 || hit.tag >= TAB_COUNT) continue;
             const bool selected = hit.tag == m_selected;
-            hit.normal = selected ? ccc3(63, 91, 155) : ccc3(20, 35, 64);
+            hit.normal = selected ? ccc3(63, 91, 155) : ccc3(43, 34, 58);
             hit.hot = selected ? ccc3(133, 157, 255) : ccc3(80, 185, 244);
             if (hit.plate) {
                 const auto col = hit.normal;
@@ -496,7 +495,7 @@ class FloweristOverlay final : public CCLayer {
 
         // The space scene stays outside the control surface. No translucent nebula
         // blooms or large particles are placed behind the cards or text.
-        rect(this, 0, 0, w, h, rgba(3, 6, 18, 255), -20);
+        rect(this, 0, 0, w, h, rgba(12, 9, 19, 255), -20);
 
         // Restrained star points are visible only in the outer margins once the
         // opaque VIRGO panel is added above this layer.
@@ -529,11 +528,11 @@ class FloweristOverlay final : public CCLayer {
 
     void decorate() {
         // Premium sci-fi frame: layered graphite glass, thin violet/cyan metal rim.
-        roundedRect(m_panel, 0, 0, PANEL_W, PANEL_H, 15.f, ccc4f(.38f, .48f, .77f, .97f), 0);
-        roundedRect(m_panel, 1.5f, 1.5f, PANEL_W - 3.f, PANEL_H - 3.f, 13.f, ccc4f(.018f, .028f, .072f, .99f), 1);
-        roundedRect(m_panel, 4.f, 4.f, PANEL_W - 8.f, PANEL_H - 8.f, 11.f, ccc4f(.047f, .067f, .14f, .98f), 2);
-        rect(m_panel, 7.f, 7.f, NAV_W, PANEL_H - 14.f, rgba(8, 13, 31, 252), 3);
-        rect(m_panel, NAV_W + 7.f, 8.f, 1.2f, PANEL_H - 16.f, rgba(90, 150, 212, 160), 4);
+        roundedRect(m_panel, 0, 0, PANEL_W, PANEL_H, 15.f, ccc4f(.36f, .28f, .49f, .97f), 0);
+        roundedRect(m_panel, 1.5f, 1.5f, PANEL_W - 3.f, PANEL_H - 3.f, 13.f, ccc4f(.035f, .026f, .052f, .99f), 1);
+        roundedRect(m_panel, 4.f, 4.f, PANEL_W - 8.f, PANEL_H - 8.f, 11.f, ccc4f(.070f, .052f, .092f, .98f), 2);
+        rect(m_panel, 7.f, 7.f, NAV_W, PANEL_H - 14.f, rgba(17, 13, 26, 255), 3);
+        rect(m_panel, NAV_W + 7.f, 8.f, 1.2f, PANEL_H - 16.f, rgba(143, 112, 180, 130), 4);
 
         auto trim = CCDrawNode::create();
         if (trim) {
@@ -552,7 +551,7 @@ class FloweristOverlay final : public CCLayer {
         const float fieldW = PANEL_W - fieldX - 8.f;
         const float fieldY = 8.f;
         const float fieldH = PANEL_H - 16.f;
-        rect(field, fieldX, fieldY, fieldW, fieldH, rgba(8, 13, 30, 255), 0);
+        rect(field, fieldX, fieldY, fieldW, fieldH, rgba(17, 13, 26, 255), 0);
 
         // Very subtle header pinpoints only; the main content and cards remain clean.
         for (int i = 0; i < 14; ++i) {
@@ -583,11 +582,11 @@ class FloweristOverlay final : public CCLayer {
                 CCEaseSineInOut::create(CCScaleTo::create(2.1f, .94f)), nullptr)));
         }
         text(m_panel, "VIRGO", 100, PANEL_H - 27, 126, 24,
-             ccc3(243, 247, 255), "goldFont.fnt", .78f);
+             ccc3(243, 247, 255), "chatFont.fnt", .78f);
         text(m_panel, "PREDICTIVE INPUT SYSTEM", 100, PANEL_H - 49, 126, 11,
-             ccc3(129, 185, 235), "bigFont.fnt", .46f);
+             ccc3(129, 185, 235), "chatFont.fnt", .46f);
         text(m_panel, "BUILD 02  /  60 TICK CAP", 100, PANEL_H - 72, 126, 9,
-             ccc3(104, 139, 191), "bigFont.fnt", .40f);
+             ccc3(104, 139, 191), "chatFont.fnt", .40f);
 
         // Spacious, consistently aligned capsule navigation. Tab typography stays large.
         for (int i = 0; i < TAB_COUNT; ++i) {
@@ -595,22 +594,22 @@ class FloweristOverlay final : public CCLayer {
             button(m_panel, TAB_NAMES[i], 91, y, 156, 30, i, false, false, i == m_selected ? 3 : 0);
         }
         button(m_panel, "GUIDE", 91, 33, 156, 34, 110);
-        text(m_panel, "F2  MENU / CLOSE", 91, 12, 140, 9, ccc3(94, 133, 186), "bigFont.fnt", .40f);
+        text(m_panel, "F2  MENU / CLOSE", 91, 12, 140, 9, ccc3(94, 133, 186), "chatFont.fnt", .40f);
         button(m_panel, "X", PANEL_W - 24, PANEL_H - 25, 34, 30, 100);
         text(m_panel, "ONLINE", PANEL_W - 95, PANEL_H - 28, 68, 12,
-             ccc3(85, 236, 190), "bigFont.fnt", .40f);
+             ccc3(85, 236, 190), "chatFont.fnt", .40f);
         updateNav();
     }
 
     void sectionTitle(const std::string& title, const std::string& subtitle) {
         text(m_content, "VIRGO  /  SPACE CONTROL", 430, 414, 450, 10,
-             ccc3(117, 163, 220), "bigFont.fnt", .43f);
+             ccc3(117, 163, 220), "chatFont.fnt", .43f);
         text(m_content, title, 430, 390, 450, 27,
-             ccc3(238, 220, 255), "goldFont.fnt", .70f);
+             ccc3(238, 220, 255), "chatFont.fnt", .70f);
         text(m_content, subtitle, 430, 365, 455, 21,
-             ccc3(145, 170, 220), "bigFont.fnt", .43f);
-        rect(m_content, 196, 346, 470, 1, rgba(97, 107, 159, 170), 4);
-        rect(m_content, 196, 346, 72, 2, rgba(166, 115, 244, 225), 5);
+             ccc3(145, 170, 220), "chatFont.fnt", .43f);
+        rect(m_content, 196, 346, 470, 1, rgba(115, 91, 145, 145), 4);
+        rect(m_content, 196, 346, 72, 2, rgba(198, 137, 221, 210), 5);
     }
 
     void buildContent() {
@@ -638,17 +637,17 @@ class FloweristOverlay final : public CCLayer {
             rect(m_content, 233, 218, 162, 2, rgba(65, 205, 157, 145), 7);
 
             text(m_content, "LOOKAHEAD CAP", 545, 285, 175, 17, ccc3(194, 177, 255));
-            text(m_content, "60 TICKS", 545, 253, 170, 25, ccc3(236, 218, 255), "goldFont.fnt");
+            text(m_content, "60 TICKS", 545, 253, 170, 25, ccc3(236, 218, 255), "chatFont.fnt");
             text(m_content, "PERFORMANCE LIMIT", 545, 226, 170, 13, ccc3(135, 157, 207));
 
             text(m_content, "LIVE CONSOLE", 294, 164, 176, 17, ccc3(208, 195, 255));
             text(m_content, "Open the log console when needed.",
-                 294, 135, 176, 24, ccc3(136, 156, 205), "bigFont.fnt", .40f);
+                 294, 135, 176, 24, ccc3(136, 156, 205), "chatFont.fnt", .40f);
             button(m_content, s_consoleVisible ? "CLOSE CONSOLE" : "OPEN CONSOLE",
                    555, 143, 164, 32, 103, true);
         } else if (m_selected == 2) {
             text(m_content, "CHOOSE WHICH GAMEMODES USE THE PREDICTIVE BUFFER", 430, 326, 430, 17,
-                 ccc3(145, 175, 226), "bigFont.fnt", .37f);
+                 ccc3(145, 175, 226), "chatFont.fnt", .37f);
 
             const int ids[] = {0, 3, 2, 4, 1, 5, 6, 7};
             const char* names[] = {"CUBE", "BALL", "SHIP", "UFO", "WAVE", "ROBOT", "SPIDER", "SWING"};
@@ -672,17 +671,17 @@ class FloweristOverlay final : public CCLayer {
                 drawGamemodeIcon(m_content, mode, {x - 82.f, y}, colors[i]);
                 text(m_content, names[i], x - 43.f, y + 7.f, 104.f, 15.f,
                      enabled ? ccc3(232, 238, 255) : ccc3(135, 146, 174),
-                     "bigFont.fnt", .52f);
+                     "chatFont.fnt", .52f);
                 text(m_content, descriptions[i], x - 43.f, y - 11.f, 112.f, 11.f,
-                     ccc3(123, 151, 198), "bigFont.fnt", .34f);
+                     ccc3(123, 151, 198), "chatFont.fnt", .34f);
                 button(m_content, enabled ? "ON" : "OFF", x + 73.f, y, 54.f, 23.f,
                        300 + mode, true, false, enabled ? 3 : 2);
             }
             text(m_content, "DISABLED MODES PASS INPUT THROUGH WITHOUT BUFFERING", 430, 22, 430, 13,
-                 ccc3(115, 145, 191), "bigFont.fnt", .34f);
+                 ccc3(115, 145, 191), "chatFont.fnt", .34f);
         } else if (m_selected == 1) {
             text(m_content, "STAGE PROFILES", 430, 326, 430, 17,
-                 ccc3(145, 175, 226), "bigFont.fnt", .40f);
+                 ccc3(145, 175, 226), "chatFont.fnt", .40f);
             const char* names[] = {"STAGE 1", "STAGE 2", "STAGE 3", "STAGE 4", "EXTREME", "CUSTOM"};
             const char* detail[] = {"STARTER", "LIGHT", "STANDARD", "ADVANCED", "INTENSE", "PERSONAL"};
             const ccColor4B fills[] = {
@@ -698,15 +697,15 @@ class FloweristOverlay final : public CCLayer {
                      i == m_selectedStage ? rgba(52, 39, 90, 255) : fills[i]);
                 text(m_content, names[i], x, y + 13.f, 128.f, 15.f,
                      i == m_selectedStage ? ccc3(238, 214, 255) : ccc3(184, 194, 233),
-                     "bigFont.fnt", .48f);
+                     "chatFont.fnt", .48f);
                 text(m_content, detail[i], x, y - 4.f, 120.f, 10.f,
-                     ccc3(145, 166, 220), "bigFont.fnt", .32f);
+                     ccc3(145, 166, 220), "chatFont.fnt", .32f);
                 button(m_content, i == m_selectedStage ? "ACTIVE" : "CHOOSE", x, y - 20.f,
                        92.f, 18.f, 200 + i, true, false, i == m_selectedStage ? 3 : 0);
             }
 
             text(m_content, "MAIN MODE FRAME LIMITS", 430, 133, 430, 13,
-                 ccc3(150, 178, 229), "bigFont.fnt", .38f);
+                 ccc3(150, 178, 229), "chatFont.fnt", .38f);
             frameControl(m_content, "CUBE", 0, 270.f, 91.f);
             frameControl(m_content, "WAVE", 1, 430.f, 91.f);
             frameControl(m_content, "SHIP", 2, 590.f, 91.f);
@@ -737,74 +736,92 @@ class FloweristOverlay final : public CCLayer {
                 "CUBE", "WAVE", "SHIP", "BALL", "UFO", "ROBOT", "SPIDER", "SWING"
             };
 
-            // Per-level memory: all displayed values come from saved gameplay events.
-            card(m_content, 205, 265, 220, 88, rgba(27, 29, 65, 255));
-            text(m_content, "LEVEL MEMORY", 315, 292, 190, 13,
-                 ccc3(220, 204, 255), "goldFont.fnt", .42f);
+            // Top dashboard: per-level memory and autoplay settings have room to breathe.
+            card(m_content, 205, 210, 220, 130, rgba(27, 29, 65, 255));
+            text(m_content, "LEVEL MEMORY", 315, 312, 190, 16,
+                 ccc3(220, 204, 255), "chatFont.fnt", .48f);
             const std::string levelLabel = virgo::brainActiveLevelId == 0
-                ? "NO TRACKED LEVEL ID"
+                ? "NO LEVEL ACTIVE"
                 : "LEVEL ID: " + std::to_string(virgo::brainActiveLevelId);
-            text(m_content, levelLabel, 315, 273, 190, 11,
-                 ccc3(190, 203, 241), "bigFont.fnt", .34f);
+            text(m_content, levelLabel, 315, 287, 194, 13,
+                 ccc3(190, 203, 241), "chatFont.fnt", .40f);
             const std::string sessionLine = "SESSIONS " +
-                std::to_string(virgo::brainCurrentLevelSessions()) + "  DEATHS " +
+                std::to_string(virgo::brainCurrentLevelSessions()) + "   DEATHS " +
                 std::to_string(virgo::brainCurrentLevelDeaths());
-            text(m_content, sessionLine, 315, 255, 194, 10,
-                 ccc3(155, 179, 220), "bigFont.fnt", .31f);
+            text(m_content, sessionLine, 315, 263, 196, 12,
+                 ccc3(174, 163, 192), "chatFont.fnt", .36f);
             const std::string objectLine = "ORBS " +
-                std::to_string(virgo::brainCurrentLevelOrbs()) + "  EFFECTS " +
-                std::to_string(virgo::brainCurrentLevelEffects()) + "  BEST X " +
+                std::to_string(virgo::brainCurrentLevelOrbs()) + "   EFFECTS " +
+                std::to_string(virgo::brainCurrentLevelEffects()) + "   BEST X " +
                 std::to_string(virgo::brainCurrentLevelBestX());
-            text(m_content, objectLine, 315, 239, 198, 10,
-                 ccc3(155, 179, 220), "bigFont.fnt", .28f);
+            text(m_content, objectLine, 315, 240, 198, 12,
+                 ccc3(174, 163, 192), "chatFont.fnt", .33f);
             text(m_content, "TRACKED LEVELS: " + std::to_string(virgo::brainTrackedLevels()),
-                 315, 225, 190, 9, ccc3(124, 151, 205), "bigFont.fnt", .28f);
+                 315, 219, 194, 11, ccc3(146, 134, 170), "chatFont.fnt", .34f);
 
-            // The mode and preset are real saved choices. The automatic input
-            // executor stays inactive until its learning/decision stage is ready.
-            card(m_content, 438, 265, 220, 88, rgba(35, 25, 64, 255));
-            text(m_content, "AUTOPLAY CONFIG", 548, 292, 190, 13,
-                 ccc3(220, 204, 255), "goldFont.fnt", .42f);
+            card(m_content, 438, 210, 220, 130, rgba(35, 25, 64, 255));
+            text(m_content, "AUTOPLAY CONFIG", 548, 312, 190, 16,
+                 ccc3(220, 204, 255), "chatFont.fnt", .48f);
             button(m_content, virgo::brainLearningEnabled ? "BRAIN ON" : "BRAIN OFF",
-                   493, 264, 86, 21, 400, true, false, virgo::brainLearningEnabled ? 3 : 2);
+                   493, 276, 88, 24, 400, true, false, virgo::brainLearningEnabled ? 3 : 2);
             button(m_content, virgo::autoPlayMode == 0 ? "NORMAL" : "PRACTICE",
-                   602, 264, 94, 21, 401, true, false, 1);
-            text(m_content, "EXECUTION: NOT ACTIVE YET", 548, 242, 190, 10,
-                 ccc3(236, 190, 136), "bigFont.fnt", .30f);
-            text(m_content, "SETUP IS SAVED", 548, 227, 190, 9,
-                 ccc3(143, 164, 214), "bigFont.fnt", .28f);
+                   602, 276, 96, 24, 401, true, false, 1);
+            text(m_content, "EXECUTION: NOT ACTIVE YET", 548, 245, 194, 12,
+                 ccc3(213, 171, 132), "chatFont.fnt", .34f);
+            text(m_content, "SETUP IS SAVED", 548, 225, 194, 11,
+                 ccc3(157, 143, 183), "chatFont.fnt", .33f);
 
-            card(m_content, 205, 176, 453, 68, rgba(24, 27, 58, 255));
-            text(m_content, "AUTOPLAY PRESETS", 430, 198, 250, 12,
-                 ccc3(198, 178, 244), "bigFont.fnt", .38f);
+            // Presets are a separate, evenly-spaced control row.
+            card(m_content, 205, 137, 453, 62, rgba(24, 27, 58, 255));
+            text(m_content, "AUTOPLAY PRESETS", 430, 177, 250, 14,
+                 ccc3(205, 183, 222), "chatFont.fnt", .43f);
             const char* presetNames[] = {"ZOINK", "TRICK", "DOGGIE", "NETTERMIND"};
             const float presetX[] = {260.f, 370.f, 480.f, 590.f};
             for (int i = 0; i < 4; ++i) {
-                button(m_content, presetNames[i], presetX[i], 170, 92, 22,
+                button(m_content, presetNames[i], presetX[i], 153, 96, 23,
                        410 + i, true, false, virgo::autoPlayPreset == i ? 3 : 0);
             }
 
-            card(m_content, 205, 70, 453, 136, rgba(23, 26, 55, 255));
-            text(m_content, "8 GAMEMODE MEMORY", 430, 124, 240, 13,
-                 ccc3(220, 204, 255), "goldFont.fnt", .42f);
-            text(m_content, "PRED", 377, 108, 65, 9, ccc3(135, 160, 211), "bigFont.fnt", .29f);
-            text(m_content, "SAFE", 493, 108, 65, 9, ccc3(135, 160, 211), "bigFont.fnt", .29f);
-            text(m_content, "DEATHS", 613, 108, 68, 9, ccc3(135, 160, 211), "bigFont.fnt", .29f);
+            // Gamemode activity is arranged in two columns to keep every row legible.
+            card(m_content, 205, 8, 453, 118, rgba(23, 26, 55, 255));
+            text(m_content, "GAMEMODE ACTIVITY", 430, 110, 240, 14,
+                 ccc3(220, 204, 255), "chatFont.fnt", .46f);
+            text(m_content, "MODE", 257, 91, 65, 10,
+                 ccc3(143, 132, 166), "chatFont.fnt", .32f);
+            text(m_content, "PRED / SAFE / DEATHS", 355, 91, 145, 10,
+                 ccc3(143, 132, 166), "chatFont.fnt", .29f);
+            text(m_content, "MODE", 483, 91, 65, 10,
+                 ccc3(143, 132, 166), "chatFont.fnt", .32f);
+            text(m_content, "PRED / SAFE / DEATHS", 580, 91, 145, 10,
+                 ccc3(143, 132, 166), "chatFont.fnt", .29f);
+            rect(m_content, 222, 85, 420, 1, rgba(115, 91, 145, 115), 7);
 
-            for (int mode = 0; mode < virgo::ModeCount; ++mode) {
-                const auto index = static_cast<std::size_t>(mode);
-                const float rowY = 94.f - static_cast<float>(mode) * 10.5f;
-                const ccColor3B rowTint = (mode % 2 == 0)
-                    ? ccc3(218, 221, 246) : ccc3(155, 174, 219);
-                text(m_content, modeNames[mode], 249, rowY, 92, 9,
-                     rowTint, "bigFont.fnt", .29f);
-                text(m_content, std::to_string(virgo::predictionsByMode[index]), 377, rowY, 68, 9,
-                     ccc3(219, 229, 255), "bigFont.fnt", .28f);
-                text(m_content, std::to_string(virgo::safeDelaysByMode[index]), 493, rowY, 68, 9,
-                     ccc3(180, 231, 217), "bigFont.fnt", .28f);
-                text(m_content, std::to_string(virgo::deathsByMode[index]), 613, rowY, 68, 9,
-                     ccc3(245, 190, 206), "bigFont.fnt", .28f);
-            }        }
+            for (int row = 0; row < 4; ++row) {
+                const int leftMode = row;
+                const int rightMode = row + 4;
+                const auto leftIndex = static_cast<std::size_t>(leftMode);
+                const auto rightIndex = static_cast<std::size_t>(rightMode);
+                const float rowY = 76.f - static_cast<float>(row) * 16.f;
+                const ccColor3B rowTint = (row % 2 == 0)
+                    ? ccc3(225, 218, 237) : ccc3(174, 163, 192);
+
+                text(m_content, modeNames[leftMode], 257, rowY, 65, 11,
+                     rowTint, "chatFont.fnt", .36f);
+                const std::string leftStats = "P " + std::to_string(virgo::predictionsByMode[leftIndex]) +
+                    "  /  " + std::to_string(virgo::safeDelaysByMode[leftIndex]) +
+                    "  /  " + std::to_string(virgo::deathsByMode[leftIndex]);
+                text(m_content, leftStats, 355, rowY, 145, 11,
+                     ccc3(209, 198, 224), "chatFont.fnt", .31f);
+
+                text(m_content, modeNames[rightMode], 483, rowY, 65, 11,
+                     rowTint, "chatFont.fnt", .36f);
+                const std::string rightStats = "P " + std::to_string(virgo::predictionsByMode[rightIndex]) +
+                    "  /  " + std::to_string(virgo::safeDelaysByMode[rightIndex]) +
+                    "  /  " + std::to_string(virgo::deathsByMode[rightIndex]);
+                text(m_content, rightStats, 580, rowY, 145, 11,
+                     ccc3(209, 198, 224), "chatFont.fnt", .31f);
+            }
+        }
 
         updateNav();
         if (m_animated) {
@@ -924,7 +941,7 @@ class FloweristOverlay final : public CCLayer {
         bubble->addChild(tail, 1);
 
         text(bubble, "LOK  /  VIRGO ASSISTANT", 0, 22, 146, 12,
-             ccc3(225, 197, 255), "bigFont.fnt", .42f);
+             ccc3(225, 197, 255), "chatFont.fnt", .42f);
         static const char* lines[] = {
             "Hi! I'm LOK, your VIRGO assistant!",
             "Use the left rail to switch tabs.",
@@ -933,7 +950,7 @@ class FloweristOverlay final : public CCLayer {
             "You're all set. Enjoy VIRGO!"
         };
         m_guideSpeech = text(bubble, lines[m_guideStep], 0, -7, 146, 34,
-                             ccc3(232, 232, 250), "bigFont.fnt", .46f);
+                             ccc3(232, 232, 250), "chatFont.fnt", .46f);
         if (m_animated) {
             bubble->setScale(.90f);
             bubble->runAction(CCEaseBackOut::create(CCScaleTo::create(.22f, 1.f)));
@@ -957,14 +974,14 @@ class FloweristOverlay final : public CCLayer {
         rect(m_modalLayer, 0, 0, PANEL_W, PANEL_H, rgba(5, 7, 22, 220), 0);
         card(m_modalLayer, 128, 82, 448, 284, rgba(22, 22, 52, 255));
         if (m_modal == 1) {
-            text(m_modalLayer, "QUICK HELP", 352, 318, 300, 22, ccc3(226, 198, 255), "goldFont.fnt", .68f);
-            text(m_modalLayer, "Do you want a guide about the GUI?", 352, 267, 330, 20, ccc3(237, 237, 255), "bigFont.fnt", .44f);
-            text(m_modalLayer, "LOK appears only if you choose YES.", 352, 231, 320, 14, ccc3(151, 170, 218), "bigFont.fnt", .42f);
+            text(m_modalLayer, "QUICK HELP", 352, 318, 300, 22, ccc3(226, 198, 255), "chatFont.fnt", .68f);
+            text(m_modalLayer, "Do you want a guide about the GUI?", 352, 267, 330, 20, ccc3(237, 237, 255), "chatFont.fnt", .44f);
+            text(m_modalLayer, "LOK appears only if you choose YES.", 352, 231, 320, 14, ccc3(151, 170, 218), "chatFont.fnt", .42f);
             button(m_modalLayer, "YES", 268, 174, 118, 38, 111, false, true, 1);
             button(m_modalLayer, "NO", 436, 174, 118, 38, 112, false, true, 2);
         } else {
             text(m_modalLayer, "VIRGO INTERFACE TOUR", 352, 338, 360, 22,
-                 ccc3(226, 198, 255), "goldFont.fnt", .68f);
+                 ccc3(226, 198, 255), "chatFont.fnt", .68f);
             drawLOK();
             button(m_modalLayer, m_guideStep == 4 ? "FINISH" : "NEXT", 414, 112, 104, 29, 113, false, true, 3);
             button(m_modalLayer, "CLOSE", 532, 112, 82, 29, 114, false, true);
