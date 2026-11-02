@@ -35,15 +35,17 @@ function Replace-Once([string]$Source, [string]$Old, [string]$New, [string]$Labe
 $sharedPath = "src/VirgoShared.hpp"
 $shared = Read-TextLF $sharedPath
 
-$shared = Replace-Once $shared @'
+$oldInclude = @'
 #pragma once
 #include <array>
-'@ @'
+'@
+$newInclude = @'
 #pragma once
 #include <Geode/Geode.hpp>
 #include <array>
 #include <string>
-'@ "add Geode saved-data support"
+'@
+$shared = Replace-Once $shared $oldInclude $newInclude "add Geode saved-data support"
 
 $oldStats = @'
 inline std::array<std::uint64_t, ModeCount> predictionsByMode = {};
@@ -127,52 +129,67 @@ inline std::uint64_t totalDeaths() {
     return total;
 }
 }
-'@ "add persistent per-mode Brain statistics"
+'@
 $shared = Replace-Once $shared $oldStats $newStats "install persistent Brain telemetry"
-# Keep every edit in memory until all source anchors have passed validation.
 
 # -----------------------------------------------------------------------------
-# 2. Feed actual engine events into the saved Brain telemetry
+# 2. Feed actual engine events into saved Brain telemetry
 # -----------------------------------------------------------------------------
 $mainPath = "src/main.cpp"
 $main = Read-TextLF $mainPath
-$main = Replace-Once $main @'
+
+$oldDeath = @'
         if (player) ++virgo::deathsByMode[virgoModeIndex(player)];
-'@ @'
+'@
+$newDeath = @'
         if (player) virgo::recordDeath(virgoModeIndex(player));
-'@ "record actual player deaths"
-$main = Replace-Once $main @'
+'@
+$main = Replace-Once $main $oldDeath $newDeath "record actual player deaths"
+
+$oldPrediction = @'
         ++virgo::predictionsByMode[telemetryMode];
-'@ @'
+'@
+$newPrediction = @'
         virgo::recordPrediction(telemetryMode);
-'@ "record prediction attempts"
-$main = Replace-Once $main @'
+'@
+$main = Replace-Once $main $oldPrediction $newPrediction "record prediction attempts"
+
+$oldSafeDelay = @'
             ++virgo::safeDelaysByMode[telemetryMode];
-'@ @'
+'@
+$newSafeDelay = @'
             virgo::recordSafeDelay(telemetryMode);
-'@ "record selected safe delays"
-$main = Replace-Once $main @'
+'@
+$main = Replace-Once $main $oldSafeDelay $newSafeDelay "record selected safe delays"
+
+$oldLoaded = @'
 $on_mod(Loaded) {
     log::info("Flowerist Rewrite loaded; console is opt-in from the LOG tab.");
 }
-'@ @'
+'@
+$newLoaded = @'
 $on_mod(Loaded) {
     virgo::loadBrainData();
     log::info("VIRGO Brain initialized: persistent per-mode telemetry loaded.");
 }
-'@ "load saved Brain data on mod startup"
+'@
+$main = Replace-Once $main $oldLoaded $newLoaded "load saved Brain data on mod startup"
 
 # -----------------------------------------------------------------------------
-# 3. Replace the Competitive page with the truthful Brain / Autoplay dashboard
+# 3. Replace the Competitive page with the Brain / Autoplay dashboard
 # -----------------------------------------------------------------------------
 $uiPath = "src/FloweristUI.cpp"
 $ui = Read-TextLF $uiPath
-$ui = Replace-Once $ui @'
+
+$oldTabs = @'
 const char* TAB_NAMES[TAB_COUNT] = {"LOGS", "STAGES", "MODES", "ASSISTS", "OPTIMIZATION", "COMPETITIVE"};
-'@ @'
+'@
+$newTabs = @'
 const char* TAB_NAMES[TAB_COUNT] = {"LOGS", "STAGES", "MODES", "ASSISTS", "OPTIMIZATION", "BRAIN / AUTO"};
-'@ "replace Competitive navigation tab"
-$ui = Replace-Once $ui @'
+'@
+$ui = Replace-Once $ui $oldTabs $newTabs "replace Competitive navigation tab"
+
+$oldTabInfo = @'
 const char* TAB_INFO[TAB_COUNT] = {
     "System status and recent activity",
     "Choose a stage and tune Cube, Wave and Ship",
@@ -181,7 +198,8 @@ const char* TAB_INFO[TAB_COUNT] = {
     "Tune the interface and performance",
     "A profile for rule-conscious play"
 };
-'@ @'
+'@
+$newTabInfo = @'
 const char* TAB_INFO[TAB_COUNT] = {
     "System status and recent activity",
     "Choose a stage and tune Cube, Wave and Ship",
@@ -190,20 +208,28 @@ const char* TAB_INFO[TAB_COUNT] = {
     "Tune the interface and performance",
     "Persistent learning records and level-aware autoplay"
 };
-'@ "update Brain navigation description"
-$ui = Replace-Once $ui @'
+'@
+$ui = Replace-Once $ui $oldTabInfo $newTabInfo "update Brain navigation description"
+
+$oldBuildStart = @'
     void buildContent() {
         clearPageHits();
-'@ @'
+'@
+$newBuildStart = @'
     void buildContent() {
         virgo::loadBrainData();
         clearPageHits();
-'@ "load saved Brain records before drawing the dashboard"
-$ui = Replace-Once $ui @'
+'@
+$ui = Replace-Once $ui $oldBuildStart $newBuildStart "load saved Brain records before drawing the dashboard"
+
+$oldSectionTitle = @'
         sectionTitle(TAB_NAMES[m_selected], TAB_INFO[m_selected]);
-'@ @'
+'@
+$newSectionTitle = @'
         sectionTitle(m_selected == 5 ? "BRAIN / AUTOPLAY" : TAB_NAMES[m_selected], TAB_INFO[m_selected]);
-'@ "show full Brain and Autoplay page title"
+'@
+$ui = Replace-Once $ui $oldSectionTitle $newSectionTitle "show full Brain and Autoplay page title"
+
 $oldBrainPage = @'
         } else if (m_selected == 5) {
             card(m_content, 204, 163, 460, 175, rgba(23, 25, 54, 255));
@@ -229,13 +255,13 @@ $newBrainPage = @'
                  ccc3(170, 170, 235), "bigFont.fnt", .34f);
             text(m_content, std::to_string(virgo::totalPredictions()), 315, 289, 190, 22,
                  ccc3(239, 226, 255), "goldFont.fnt", .66f);
-            text(m_content, "ALL MODES · SAVED DATA", 315, 273, 180, 10,
+            text(m_content, "ALL MODES - SAVED DATA", 315, 273, 180, 10,
                  ccc3(123, 150, 204), "bigFont.fnt", .30f);
             text(m_content, "SAFE DELAYS SELECTED", 548, 314, 190, 13,
                  ccc3(170, 170, 235), "bigFont.fnt", .34f);
-            text(m_content, std::to_string(virgo::totalSafeDelays()), 548, 289, 190, 22,
+            text(m_content, std::to_string(virgo::totalSafeDelays()), 548, 289, 170, 22,
                  ccc3(239, 226, 255), "goldFont.fnt", .66f);
-            text(m_content, "ALL MODES · SAVED DATA", 548, 273, 180, 10,
+            text(m_content, "ALL MODES - SAVED DATA", 548, 273, 180, 10,
                  ccc3(123, 150, 204), "bigFont.fnt", .30f);
 
             card(m_content, 205, 65, 453, 187, rgba(23, 26, 55, 255));
@@ -264,6 +290,8 @@ $newBrainPage = @'
         }
 '@
 $ui = Replace-Once $ui $oldBrainPage $newBrainPage "replace Competitive page with Brain and Autoplay dashboard"
+
+# All source anchors have passed. Only now write the edited files.
 Write-TextLF $sharedPath $shared
 Write-TextLF $mainPath $main
 Write-TextLF $uiPath $ui
