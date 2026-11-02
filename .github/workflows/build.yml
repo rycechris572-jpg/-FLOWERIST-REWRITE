@@ -13,27 +13,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Apply VIRGO engine mode controls
+      - name: Apply VIRGO Phase 3 Brain foundation
         shell: pwsh
-        run: ./apply_virgo_main_patch.ps1
+        run: ./apply_virgo_phase3_brain.ps1
 
-      - name: Commit engine source update
+      - name: Commit Phase 3 source update
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/main.cpp
+          git add src/main.cpp src/VirgoShared.hpp src/FloweristUI.cpp
           git diff --cached --quiet
           $diffExit = $LASTEXITCODE
           if ($diffExit -eq 1) {
-            git commit -m "Wire VIRGO gamemode controls into input engine"
+            git commit -m "Start VIRGO Phase 3 Brain foundation"
             if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
             git push origin HEAD:${{ github.ref_name }}
             if ($LASTEXITCODE -ne 0) { throw "git push failed" }
           } elseif ($diffExit -ne 0) {
             throw "git diff check failed with exit code $diffExit"
           } else {
-            Write-Host "No engine source changes were needed."
+            Write-Host "Phase 3 Brain foundation is already applied."
           }
 
       - name: Build Geode mod
@@ -49,4 +49,3 @@ jobs:
           name: virgo-windows
           path: ${{ steps.build.outputs.build-output }}
           if-no-files-found: error
-
