@@ -10,6 +10,7 @@
 #include <sstream>
 #include <vector>
 #include "VirgoShared.hpp"
+#include "VirgoBrain.hpp"
 
 using namespace geode::prelude;
 
@@ -732,50 +733,78 @@ class FloweristOverlay final : public CCLayer {
                  235, 193, 255, 26, ccc3(142, 164, 213));
             button(m_content, m_quiet ? "TURN OFF" : "TURN ON", 584, 204, 112, 31, 101, true);
         } else if (m_selected == 5) {
-            // These are real, persisted engine counters. Grades and IQ remain hidden
-            // until VIRGO has enough level-specific evidence to calculate them honestly.
             const char* modeNames[virgo::ModeCount] = {
                 "CUBE", "WAVE", "SHIP", "BALL", "UFO", "ROBOT", "SPIDER", "SWING"
             };
-            card(m_content, 205, 266, 220, 67, rgba(27, 29, 65, 255));
-            card(m_content, 438, 266, 220, 67, rgba(37, 25, 65, 255));
-            text(m_content, "PREDICTION ATTEMPTS", 315, 314, 190, 13,
-                 ccc3(170, 170, 235), "bigFont.fnt", .34f);
-            text(m_content, std::to_string(virgo::totalPredictions()), 315, 289, 190, 22,
-                 ccc3(239, 226, 255), "goldFont.fnt", .66f);
-            text(m_content, "ALL MODES - SAVED DATA", 315, 273, 180, 10,
-                 ccc3(123, 150, 204), "bigFont.fnt", .30f);
-            text(m_content, "SAFE DELAYS SELECTED", 548, 314, 190, 13,
-                 ccc3(170, 170, 235), "bigFont.fnt", .34f);
-            text(m_content, std::to_string(virgo::totalSafeDelays()), 548, 289, 170, 22,
-                 ccc3(239, 226, 255), "goldFont.fnt", .66f);
-            text(m_content, "ALL MODES - SAVED DATA", 548, 273, 180, 10,
-                 ccc3(123, 150, 204), "bigFont.fnt", .30f);
 
-            card(m_content, 205, 65, 453, 187, rgba(23, 26, 55, 255));
-            text(m_content, "MODE MEMORY", 430, 231, 220, 15,
-                 ccc3(220, 204, 255), "goldFont.fnt", .48f);
-            text(m_content, "PRED", 377, 210, 65, 10, ccc3(135, 160, 211), "bigFont.fnt", .31f);
-            text(m_content, "DELAY", 493, 210, 65, 10, ccc3(135, 160, 211), "bigFont.fnt", .31f);
-            text(m_content, "DEATHS", 613, 210, 68, 10, ccc3(135, 160, 211), "bigFont.fnt", .31f);
+            // Per-level memory: all displayed values come from saved gameplay events.
+            card(m_content, 205, 265, 220, 88, rgba(27, 29, 65, 255));
+            text(m_content, "LEVEL MEMORY", 315, 292, 190, 13,
+                 ccc3(220, 204, 255), "goldFont.fnt", .42f);
+            const std::string levelLabel = virgo::brainActiveLevelId == 0
+                ? "NO TRACKED LEVEL ID"
+                : "LEVEL ID: " + std::to_string(virgo::brainActiveLevelId);
+            text(m_content, levelLabel, 315, 273, 190, 11,
+                 ccc3(190, 203, 241), "bigFont.fnt", .34f);
+            const std::string sessionLine = "SESSIONS " +
+                std::to_string(virgo::brainCurrentLevelSessions()) + "  DEATHS " +
+                std::to_string(virgo::brainCurrentLevelDeaths());
+            text(m_content, sessionLine, 315, 255, 194, 10,
+                 ccc3(155, 179, 220), "bigFont.fnt", .31f);
+            const std::string objectLine = "ORBS " +
+                std::to_string(virgo::brainCurrentLevelOrbs()) + "  EFFECTS " +
+                std::to_string(virgo::brainCurrentLevelEffects()) + "  BEST X " +
+                std::to_string(virgo::brainCurrentLevelBestX());
+            text(m_content, objectLine, 315, 239, 198, 10,
+                 ccc3(155, 179, 220), "bigFont.fnt", .28f);
+            text(m_content, "TRACKED LEVELS: " + std::to_string(virgo::brainTrackedLevels()),
+                 315, 225, 190, 9, ccc3(124, 151, 205), "bigFont.fnt", .28f);
+
+            // The mode and preset are real saved choices. The automatic input
+            // executor stays inactive until its learning/decision stage is ready.
+            card(m_content, 438, 265, 220, 88, rgba(35, 25, 64, 255));
+            text(m_content, "AUTOPLAY CONFIG", 548, 292, 190, 13,
+                 ccc3(220, 204, 255), "goldFont.fnt", .42f);
+            button(m_content, virgo::brainLearningEnabled ? "BRAIN ON" : "BRAIN OFF",
+                   493, 264, 86, 21, 400, true, false, virgo::brainLearningEnabled ? 3 : 2);
+            button(m_content, virgo::autoPlayMode == 0 ? "NORMAL" : "PRACTICE",
+                   602, 264, 94, 21, 401, true, false, 1);
+            text(m_content, "EXECUTION: NOT ACTIVE YET", 548, 242, 190, 10,
+                 ccc3(236, 190, 136), "bigFont.fnt", .30f);
+            text(m_content, "SETUP IS SAVED", 548, 227, 190, 9,
+                 ccc3(143, 164, 214), "bigFont.fnt", .28f);
+
+            card(m_content, 205, 176, 453, 68, rgba(24, 27, 58, 255));
+            text(m_content, "AUTOPLAY PRESETS", 430, 198, 250, 12,
+                 ccc3(198, 178, 244), "bigFont.fnt", .38f);
+            const char* presetNames[] = {"ZOINK", "TRICK", "DOGGIE", "NETTERMIND"};
+            const float presetX[] = {260.f, 370.f, 480.f, 590.f};
+            for (int i = 0; i < 4; ++i) {
+                button(m_content, presetNames[i], presetX[i], 170, 92, 22,
+                       410 + i, true, false, virgo::autoPlayPreset == i ? 3 : 0);
+            }
+
+            card(m_content, 205, 70, 453, 136, rgba(23, 26, 55, 255));
+            text(m_content, "8 GAMEMODE MEMORY", 430, 124, 240, 13,
+                 ccc3(220, 204, 255), "goldFont.fnt", .42f);
+            text(m_content, "PRED", 377, 108, 65, 9, ccc3(135, 160, 211), "bigFont.fnt", .29f);
+            text(m_content, "SAFE", 493, 108, 65, 9, ccc3(135, 160, 211), "bigFont.fnt", .29f);
+            text(m_content, "DEATHS", 613, 108, 68, 9, ccc3(135, 160, 211), "bigFont.fnt", .29f);
 
             for (int mode = 0; mode < virgo::ModeCount; ++mode) {
                 const auto index = static_cast<std::size_t>(mode);
-                const float rowY = 190.f - static_cast<float>(mode) * 16.f;
+                const float rowY = 94.f - static_cast<float>(mode) * 10.5f;
                 const ccColor3B rowTint = (mode % 2 == 0)
                     ? ccc3(218, 221, 246) : ccc3(155, 174, 219);
-                text(m_content, modeNames[mode], 249, rowY, 92, 11,
-                     rowTint, "bigFont.fnt", .34f);
-                text(m_content, std::to_string(virgo::predictionsByMode[index]), 377, rowY, 68, 11,
-                     ccc3(219, 229, 255), "bigFont.fnt", .33f);
-                text(m_content, std::to_string(virgo::safeDelaysByMode[index]), 493, rowY, 68, 11,
-                     ccc3(180, 231, 217), "bigFont.fnt", .33f);
-                text(m_content, std::to_string(virgo::deathsByMode[index]), 613, rowY, 68, 11,
-                     ccc3(245, 190, 206), "bigFont.fnt", .33f);
-            }
-            text(m_content, "LEVEL LEARNING + AUTOPLAY: NEXT BRAIN MILESTONE",
-                 430, 44, 440, 12, ccc3(184, 151, 239), "bigFont.fnt", .34f);
-        }
+                text(m_content, modeNames[mode], 249, rowY, 92, 9,
+                     rowTint, "bigFont.fnt", .29f);
+                text(m_content, std::to_string(virgo::predictionsByMode[index]), 377, rowY, 68, 9,
+                     ccc3(219, 229, 255), "bigFont.fnt", .28f);
+                text(m_content, std::to_string(virgo::safeDelaysByMode[index]), 493, rowY, 68, 9,
+                     ccc3(180, 231, 217), "bigFont.fnt", .28f);
+                text(m_content, std::to_string(virgo::deathsByMode[index]), 613, rowY, 68, 9,
+                     ccc3(245, 190, 206), "bigFont.fnt", .28f);
+            }        }
 
         updateNav();
         if (m_animated) {
@@ -995,6 +1024,21 @@ class FloweristOverlay final : public CCLayer {
             virgo::saveSettings();
             buildContent();
             return;
+        } else if (tag == 400) {
+            virgo::brainLearningEnabled = !virgo::brainLearningEnabled;
+            virgo::saveSettings();
+            buildContent();
+            return;
+        } else if (tag == 401) {
+            virgo::autoPlayMode = virgo::autoPlayMode == 0 ? 1 : 0;
+            virgo::saveSettings();
+            buildContent();
+            return;
+        } else if (tag >= 410 && tag < 414) {
+            virgo::autoPlayPreset = tag - 410;
+            virgo::saveSettings();
+            buildContent();
+            return;
         } else if (tag == 102) {
             m_animated = !m_animated;
             virgo::animationsEnabled = m_animated;
@@ -1020,6 +1064,10 @@ public:
 
     bool init() override {
         if (!CCLayer::init()) return false;
+        virgo::loadSettings();
+        m_selectedStage = virgo::selectedStage;
+        m_quiet = virgo::quietMode;
+        m_animated = virgo::animationsEnabled;
         virgo::loadSettings();
         m_selectedStage = virgo::selectedStage;
         m_quiet = virgo::quietMode;

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstdint>
 #include "VirgoShared.hpp"
+#include "VirgoBrain.hpp"
 
 using namespace geode::prelude;
 
@@ -212,7 +213,11 @@ public:
             return true;
         }
         // Record real deaths per gamemode for future VIRGO learning telemetry.
-        if (player) virgo::recordDeath(virgoModeIndex(player));
+        if (player) {
+            const int mode = virgoModeIndex(player);
+            virgo::recordDeath(mode);
+            virgo::brainRecordLevelDeath(mode, player->getPositionX());
+        }
         // Real player died -> clear any pending buffer so respawn is 100% clean
         m_waitTicks = -1;
         m_queuedOpposite = false;
@@ -614,6 +619,7 @@ class $modify(BufPlayLayer, PlayLayer) {
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
+        virgo::brainBeginLevel(level ? level->m_levelID : 0, virgoModeIndex(this->m_player1));
         s_sim.init();
         // In-level overlay; removed automatically with PlayLayer.
         auto size = cocos2d::CCDirector::sharedDirector()->getWinSize();
@@ -677,6 +683,8 @@ class $modify(BufEffectGameObject, EffectGameObject) {
 
     void triggerObject(GJBaseGameLayer* p0, int p1, const gd::vector<int>* p2) {
         if (s_sim.isSimulating()) return;
+        auto* playLayer = PlayLayer::get();
+        virgo::brainRecordEffect(virgoModeIndex(playLayer ? playLayer->m_player1 : nullptr), this);
         EffectGameObject::triggerObject(p0, p1, p2);
     }
 };
@@ -714,13 +722,14 @@ class $modify(BufPlayerObject, PlayerObject) {
             s_sim.onPlayerUpdate(this);
         }
         PlayerObject::update(dt);
-        if (PlayLayer::get() && !s_sim.isSimulating()) {
+        +
             s_sim.setFrameDelta(dt);
         }
     }
 
     void ringJump(RingObject* p0, bool p1) {
         if (s_sim.isSimulating()) return;
+        virgo::brainRecordOrb(virgoModeIndex(this), p0);
         PlayerObject::ringJump(p0, p1);
     }
 };
