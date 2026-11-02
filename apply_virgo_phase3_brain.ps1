@@ -12,7 +12,16 @@ function Write-TextLF([string]$Path, [string]$Content) {
     [System.IO.File]::WriteAllText($fullPath, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Normalize-LF([string]$Text) {
+    return $Text.Replace("`r`n", "`n").Replace("`r", "`n")
+}
+
 function Replace-Once([string]$Source, [string]$Old, [string]$New, [string]$Label) {
+    # PowerShell here-strings preserve the script file's line endings. Normalize
+    # both here-string anchors and source text so CRLF checkouts match LF anchors.
+    $Source = Normalize-LF $Source
+    $Old = Normalize-LF $Old
+    $New = Normalize-LF $New
     $count = [regex]::Matches($Source, [regex]::Escape($Old)).Count
     if ($count -eq 0) {
         $alreadyCount = [regex]::Matches($Source, [regex]::Escape($New)).Count
