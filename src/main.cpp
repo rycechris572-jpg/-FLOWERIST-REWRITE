@@ -205,7 +205,7 @@ public:
             return true;
         }
         // Record real deaths per gamemode for future VIRGO learning telemetry.
-        if (player) ++virgo::deathsByMode[virgoModeIndex(player)];
+        if (player) virgo::recordDeath(virgoModeIndex(player));
         // Real player died -> clear any pending buffer so respawn is 100% clean
         m_waitTicks = -1;
         m_queuedOpposite = false;
@@ -414,7 +414,7 @@ public:
         int maxDelayFrames = std::clamp(modeLimit, 0, MAX_BUFFER_TICKS);
 
         const int telemetryMode = virgoModeIndex(p1);
-        ++virgo::predictionsByMode[telemetryMode];
+        virgo::recordPrediction(telemetryMode);
 
         // 4. Check Frame 0 (immediate input) across the full trajectory horizon
         int ticksFrame0 = getSurvivalTicks(pl, p1, p2, isDual, 0, push, targetHorizon);
@@ -472,7 +472,7 @@ public:
         }
 
         if (bestDelay > 0) {
-            ++virgo::safeDelaysByMode[telemetryMode];
+            virgo::recordSafeDelay(telemetryMode);
             // Throttle expensive console writes under repeated fast inputs.
             const auto now = static_cast<unsigned long long>(GetTickCount64());
             if (!m_lastConsolePrintMs || now - m_lastConsolePrintMs >= CONSOLE_LOG_INTERVAL_MS) {
@@ -572,7 +572,8 @@ static void refreshBufferHud() {
 }
 
 $on_mod(Loaded) {
-    log::info("Flowerist Rewrite loaded; console is opt-in from the LOG tab.");
+    virgo::loadBrainData();
+    log::info("VIRGO Brain initialized: persistent per-mode telemetry loaded.");
 }
 
 class $modify(BufPlayLayer, PlayLayer) {

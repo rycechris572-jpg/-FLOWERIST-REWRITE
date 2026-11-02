@@ -20,14 +20,14 @@ constexpr float NAV_W = 174.f;
 constexpr float PI = 3.1415926535f;
 constexpr int TAB_COUNT = 6;
 bool s_consoleVisible = false;
-const char* TAB_NAMES[TAB_COUNT] = {"LOGS", "STAGES", "MODES", "ASSISTS", "OPTIMIZATION", "COMPETITIVE"};
+const char* TAB_NAMES[TAB_COUNT] = {"LOGS", "STAGES", "MODES", "ASSISTS", "OPTIMIZATION", "BRAIN / AUTO"};
 const char* TAB_INFO[TAB_COUNT] = {
     "System status and recent activity",
     "Choose a stage and tune Cube, Wave and Ship",
     "Choose which gamemodes use Predictive Input Buffer",
     "See the active assistance systems",
     "Tune the interface and performance",
-    "A profile for rule-conscious play"
+    "Persistent learning records and level-aware autoplay"
 };
 
 ccColor4B rgba(int r, int g, int b, int a = 255) { return ccc4(r, g, b, a); }
@@ -613,6 +613,7 @@ class FloweristOverlay final : public CCLayer {
     }
 
     void buildContent() {
+        virgo::loadBrainData();
         clearPageHits();
         if (m_content) {
             m_content->removeFromParentAndCleanup(true);
@@ -621,7 +622,7 @@ class FloweristOverlay final : public CCLayer {
         m_content = CCNode::create();
         if (!m_content) return;
         m_panel->addChild(m_content, 6);
-        sectionTitle(TAB_NAMES[m_selected], TAB_INFO[m_selected]);
+        sectionTitle(m_selected == 5 ? "BRAIN / AUTOPLAY" : TAB_NAMES[m_selected], TAB_INFO[m_selected]);
 
         if (m_selected == 0) {
             // Overview: two compact telemetry cards plus a wider action panel.
@@ -730,14 +731,49 @@ class FloweristOverlay final : public CCLayer {
                  235, 193, 255, 26, ccc3(142, 164, 213));
             button(m_content, m_quiet ? "TURN OFF" : "TURN ON", 584, 204, 112, 31, 101, true);
         } else if (m_selected == 5) {
-            card(m_content, 204, 163, 460, 175, rgba(23, 25, 54, 255));
-            text(m_content, "COMPETITIVE PROFILE", 432, 295, 360, 23, ccc3(221, 202, 255), "goldFont.fnt");
-            text(m_content, "Review the rules of each event before enabling assistance.",
-                 432, 253, 410, 30, ccc3(155, 172, 216));
-            rect(m_content, 231, 226, 402, 1, rgba(95, 108, 159, 130), 6);
-            text(m_content, "This page is a reminder to check event rules, not an anti-cheat bypass.",
-                 432, 203, 410, 32, ccc3(155, 172, 216));
-            text(m_content, "MANUAL PROFILE", 432, 175, 200, 16, ccc3(238, 190, 122));
+            // These are real, persisted engine counters. Grades and IQ remain hidden
+            // until VIRGO has enough level-specific evidence to calculate them honestly.
+            const char* modeNames[virgo::ModeCount] = {
+                "CUBE", "WAVE", "SHIP", "BALL", "UFO", "ROBOT", "SPIDER", "SWING"
+            };
+            card(m_content, 205, 266, 220, 67, rgba(27, 29, 65, 255));
+            card(m_content, 438, 266, 220, 67, rgba(37, 25, 65, 255));
+            text(m_content, "PREDICTION ATTEMPTS", 315, 314, 190, 13,
+                 ccc3(170, 170, 235), "bigFont.fnt", .34f);
+            text(m_content, std::to_string(virgo::totalPredictions()), 315, 289, 190, 22,
+                 ccc3(239, 226, 255), "goldFont.fnt", .66f);
+            text(m_content, "ALL MODES - SAVED DATA", 315, 273, 180, 10,
+                 ccc3(123, 150, 204), "bigFont.fnt", .30f);
+            text(m_content, "SAFE DELAYS SELECTED", 548, 314, 190, 13,
+                 ccc3(170, 170, 235), "bigFont.fnt", .34f);
+            text(m_content, std::to_string(virgo::totalSafeDelays()), 548, 289, 170, 22,
+                 ccc3(239, 226, 255), "goldFont.fnt", .66f);
+            text(m_content, "ALL MODES - SAVED DATA", 548, 273, 180, 10,
+                 ccc3(123, 150, 204), "bigFont.fnt", .30f);
+
+            card(m_content, 205, 65, 453, 187, rgba(23, 26, 55, 255));
+            text(m_content, "MODE MEMORY", 430, 231, 220, 15,
+                 ccc3(220, 204, 255), "goldFont.fnt", .48f);
+            text(m_content, "PRED", 377, 210, 65, 10, ccc3(135, 160, 211), "bigFont.fnt", .31f);
+            text(m_content, "DELAY", 493, 210, 65, 10, ccc3(135, 160, 211), "bigFont.fnt", .31f);
+            text(m_content, "DEATHS", 613, 210, 68, 10, ccc3(135, 160, 211), "bigFont.fnt", .31f);
+
+            for (int mode = 0; mode < virgo::ModeCount; ++mode) {
+                const auto index = static_cast<std::size_t>(mode);
+                const float rowY = 190.f - static_cast<float>(mode) * 16.f;
+                const ccColor3B rowTint = (mode % 2 == 0)
+                    ? ccc3(218, 221, 246) : ccc3(155, 174, 219);
+                text(m_content, modeNames[mode], 249, rowY, 92, 11,
+                     rowTint, "bigFont.fnt", .34f);
+                text(m_content, std::to_string(virgo::predictionsByMode[index]), 377, rowY, 68, 11,
+                     ccc3(219, 229, 255), "bigFont.fnt", .33f);
+                text(m_content, std::to_string(virgo::safeDelaysByMode[index]), 493, rowY, 68, 11,
+                     ccc3(180, 231, 217), "bigFont.fnt", .33f);
+                text(m_content, std::to_string(virgo::deathsByMode[index]), 613, rowY, 68, 11,
+                     ccc3(245, 190, 206), "bigFont.fnt", .33f);
+            }
+            text(m_content, "LEVEL LEARNING + AUTOPLAY: NEXT BRAIN MILESTONE",
+                 430, 44, 440, 12, ccc3(184, 151, 239), "bigFont.fnt", .34f);
         }
 
         updateNav();
