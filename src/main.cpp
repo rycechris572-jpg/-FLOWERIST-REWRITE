@@ -53,7 +53,7 @@ constexpr int SPAM_STREAK_REQUIRED = 3;
 // Limit delay scanning cost while retaining fine-grained search for short delays.
 constexpr int MAX_BUFFER_TICKS = 60;
 constexpr int FINE_SCAN_TICKS = 8;
-constexpr int COARSE_SCAN_SAMPLES = 8;
+constexpr int COARSE_SCAN_SAMPLES = 12; // denser coarse scan without raising the 60-frame cap
 constexpr unsigned long long CONSOLE_LOG_INTERVAL_MS = 250;
 
 // ============================================================================
@@ -134,11 +134,15 @@ private:
 
 public:
     void init() {
+        virgo::loadSettings();
+        virgo::loadBrainData();
         PlayLayer* pl = PlayLayer::get();
         if (!pl) return;
 
         m_simPlayer1 = createTrajectoryPlayer();
         m_simPlayer2 = createTrajectoryPlayer();
+        m_enabled = virgo::bufferEnabled;
+        m_presetIndex = std::clamp(virgo::bufferPresetIndex, 0, 9);
         m_maxTicksNormal = std::clamp(virgo::modeFrames[virgo::Cube], 0, MAX_BUFFER_TICKS);
         m_maxTicksWave = std::clamp(virgo::modeFrames[virgo::Wave], 0, MAX_BUFFER_TICKS);
         m_waitTicks = -1;
@@ -184,6 +188,9 @@ public:
         virgo::modeFrames[virgo::Cube] = m_maxTicksNormal;
         virgo::modeFrames[virgo::Wave] = m_maxTicksWave;
         virgo::modeFrames[virgo::Ship] = m_maxTicksNormal;
+        virgo::bufferEnabled = m_enabled;
+        virgo::bufferPresetIndex = m_presetIndex;
+        virgo::saveSettings();
 
         if (m_enabled) {
             printf("[InputBuffer] F6 Cycle -> STAGE %d: %d Ticks All | %d Ticks Wave\n",
@@ -428,43 +435,64 @@ public:
         int bestDelay = 0;
         int bestTicks = ticksFrame0;
 
-        // Stage A: check short delays precisely. Stage B: sample long delays sparsely.
-        // This bounds the most expensive simulation loop at 16 candidates/input.
+        // Phase 3.2: scan short delays one-by-one, sample the wider range more densely,
+        // then inspect the gap before the first fully safe coarse sample. The maximum
+        // remains 60 frames; the denser search improves timing precision, not delay size.
+        // Worst case is approximately 20 coarse/fine samples plus at most 4 gap checks.
         const int fineEnd = std::min(maxDelayFrames, FINE_SCAN_TICKS);
         const int coarseRemaining = std::max(0, maxDelayFrames - fineEnd);
         const int coarseStride = coarseRemaining > 0
             ? std::max(1, (coarseRemaining + COARSE_SCAN_SAMPLES - 1) / COARSE_SCAN_SAMPLES)
             : 1;
+        int previousTestedDelay = 0;
+
         for (int delay = 1; delay <= maxDelayFrames; ) {
-            int ticks = getSurvivalTicks(pl, p1, p2, isDual, delay, push, targetHorizon);
+            const int ticks = getSurvivalTicks(pl, p1, p2, isDual, delay, push, targetHorizon);
+            const bool fullySafe = isWave
+                ? (ticks >= targetHorizon && (ticks - ticksFrame0) >= (delay * 2) + 6)
+                : (ticks >= targetHorizon);
+
+            if (fullySafe) {
+                int selectedDelay = delay;
+                int selectedTicks = ticks;
+
+                // Coarse sampling can jump over a better earlier frame. Refine only
+                // that small unsampled gap, and keep the earliest candidate that clears.
+                for (int refineDelay = previousTestedDelay + 1; refineDelay < delay; ++refineDelay) {
+                    const int refineTicks = getSurvivalTicks(
+                        pl, p1, p2, isDual, refineDelay, push, targetHorizon
+                    );
+                    const bool refineSafe = isWave
+                        ? (refineTicks >= targetHorizon &&
+                           (refineTicks - ticksFrame0) >= (refineDelay * 2) + 6)
+                        : (refineTicks >= targetHorizon);
+                    if (refineSafe) {
+                        selectedDelay = refineDelay;
+                        selectedTicks = refineTicks;
+                        break;
+                    }
+                }
+
+                bestDelay = selectedDelay;
+                bestTicks = selectedTicks;
+                break;
+            }
 
             if (isWave) {
-                // In Wave mode, delaying a turn inside a flat corridor naturally adds ~(2 * delay)
-                // ticks against the opposite wall. Require at least (2 * delay + 10) extra ticks
-                // so we ONLY buffer when the delayed trajectory actually clears past a spike,
-                // sawblade, or corner!
-                int minClearedGain = (delay * 2) + 10;
-                if (ticks >= targetHorizon && (ticks - ticksFrame0) >= (delay * 2) + 6) {
-                    bestDelay = delay;
-                    bestTicks = ticks;
-                    break;
-                }
-                if (ticks >= ticksFrame0 + minClearedGain && ticks > bestTicks + 2) {
-                    bestDelay = delay;
-                    bestTicks = ticks;
-                    if (ticks >= targetHorizon) break;
-                }
-            } else {
-                if (ticks >= targetHorizon) {
-                    bestDelay = delay;
-                    bestTicks = ticks;
-                    break;
-                }
-                if (ticks > bestTicks + 12) {
+                // For a partial Wave improvement, keep the existing gain threshold.
+                const int minClearedGain = (delay * 2) + 10;
+                if (ticks < targetHorizon && ticks >= ticksFrame0 + minClearedGain &&
+                    ticks > bestTicks + 2) {
                     bestDelay = delay;
                     bestTicks = ticks;
                 }
+            } else if (ticks > bestTicks + 12) {
+                // Keep the existing non-Wave partial-survival fallback.
+                bestDelay = delay;
+                bestTicks = ticks;
             }
+
+            previousTestedDelay = delay;
             if (delay < fineEnd) ++delay;
             else if (delay == fineEnd && coarseRemaining > 0) delay = std::min(maxDelayFrames, fineEnd + coarseStride);
             else if (delay >= maxDelayFrames) break;
@@ -573,7 +601,8 @@ static void refreshBufferHud() {
 
 $on_mod(Loaded) {
     virgo::loadBrainData();
-    log::info("VIRGO Brain initialized: persistent per-mode telemetry loaded.");
+    virgo::loadSettings();
+    log::info("VIRGO Brain and user preferences loaded from saved data.");
 }
 
 class $modify(BufPlayLayer, PlayLayer) {

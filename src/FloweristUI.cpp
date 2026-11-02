@@ -614,6 +614,7 @@ class FloweristOverlay final : public CCLayer {
 
     void buildContent() {
         virgo::loadBrainData();
+        virgo::loadSettings();
         clearPageHits();
         if (m_content) {
             m_content->removeFromParentAndCleanup(true);
@@ -978,22 +979,30 @@ class FloweristOverlay final : public CCLayer {
             if (m_selectedStage < 5) {
                 for (int i = 0; i < 3; ++i) virgo::modeFrames[i] = stageFrames[m_selectedStage][i];
             }
+            virgo::selectedStage = m_selectedStage;
+            virgo::saveSettings();
         } else if (tag >= 220 && tag < 226) {
             const int mode = (tag - 220) / 2;
             const bool increase = ((tag - 220) % 2) == 1;
             const int step = increase ? 1 : -1;
             virgo::modeFrames[mode] = std::clamp(virgo::modeFrames[mode] + step, 0, 60);
+            virgo::saveSettings();
             buildContent();
             return;
         } else if (tag >= 300 && tag < 308) {
             const int mode = tag - 300;
             virgo::modeEnabled[mode] = !virgo::modeEnabled[mode];
+            virgo::saveSettings();
             buildContent();
             return;
         } else if (tag == 102) {
             m_animated = !m_animated;
+            virgo::animationsEnabled = m_animated;
+            virgo::saveSettings();
         } else if (tag == 101) {
             m_quiet = !m_quiet;
+            virgo::quietMode = m_quiet;
+            virgo::saveSettings();
         }
         buildContent();
     }
@@ -1011,6 +1020,10 @@ public:
 
     bool init() override {
         if (!CCLayer::init()) return false;
+        virgo::loadSettings();
+        m_selectedStage = virgo::selectedStage;
+        m_quiet = virgo::quietMode;
+        m_animated = virgo::animationsEnabled;
         // Capture first, then route clicks to our own controls. No CCMenu items
         // are used, so the catch layer can reliably swallow clicks over the UI.
         setTouchEnabled(true);
