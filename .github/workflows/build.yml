@@ -17,23 +17,27 @@ jobs:
         shell: pwsh
         run: ./apply_virgo_phase3_brain.ps1
 
+      - name: Apply VIRGO Phase 3.3 Brain and Autoplay configuration
+        shell: pwsh
+        run: ./apply_virgo_phase3_3.ps1
+
       - name: Commit Phase 3 source update
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/main.cpp src/VirgoShared.hpp src/FloweristUI.cpp
+          git add src/main.cpp src/VirgoShared.hpp src/VirgoBrain.hpp src/FloweristUI.cpp
           git diff --cached --quiet
           $diffExit = $LASTEXITCODE
           if ($diffExit -eq 1) {
-            git commit -m "Start VIRGO Phase 3 Brain foundation"
+            git commit -m "Start VIRGO Phase 3.3 Brain and Autoplay foundation"
             if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
             git push origin HEAD:${{ github.ref_name }}
             if ($LASTEXITCODE -ne 0) { throw "git push failed" }
           } elseif ($diffExit -ne 0) {
             throw "git diff check failed with exit code $diffExit"
           } else {
-            Write-Host "Phase 3 Brain foundation is already applied."
+            Write-Host "Phase 3.3 Brain and Autoplay foundation is already applied."
           }
 
       - name: Build Geode mod
