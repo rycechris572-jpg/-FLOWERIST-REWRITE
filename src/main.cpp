@@ -727,7 +727,6 @@ class $modify(BufPlayerObject, PlayerObject) {
             virgo::brainRecordProgress(getPositionX());
         }
     }
-    }
 
     void ringJump(RingObject* p0, bool p1) {
         if (s_sim.isSimulating()) return;
