@@ -106,27 +106,8 @@ $new = @'
 '@
 $main = Replace-Once $main '    unsigned int m_suppressedConsoleMessages = 0;' $new "Autoplay runtime state"
 
-# IMPORTANT: use the full init() context here. The one-line anchor also occurs
-# in the member declaration inserted above, so matching it alone is ambiguous.
-$old = @'
-        m_lastConsolePrintMs = 0;
-        m_suppressedConsoleMessages = 0;
-    }
-
-    void quit() {
-'@
-$new = @'
-        m_lastConsolePrintMs = 0;
-        m_suppressedConsoleMessages = 0;
-        m_autoDecisionCooldown = 0;
-        m_autoTapReleaseTicks = 0;
-        m_autoWasActive = false;
-    }
-
-    void quit() {
-'@
-$main = Replace-Once $main $old $new "Autoplay init state"
-
+# The runtime members are initialized by their in-class defaults.
+# quit() below resets them when a level ends, so no init() text replacement is needed.
 $old = @'
         m_rapidInputStreak = 0;
     }
