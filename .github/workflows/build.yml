@@ -22,16 +22,20 @@ jobs:
         shell: pwsh
         run: ./nova_ui_redesign.ps1
 
-      - name: Commit repaired source
+      - name: Apply VIRGO Autoplay v1
+        shell: pwsh
+        run: ./virgo_autoplay_v1_patch.ps1
+
+      - name: Commit VIRGO source
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/main.cpp src/VirgoShared.hpp src/FloweristUI.cpp
+           git add src/main.cpp src/VirgoShared.hpp src/FloweristUI.cpp src/VirgoBrain.hpp
           git diff --cached --quiet
           $diffExit = $LASTEXITCODE
           if ($diffExit -eq 1) {
-            git commit -m "Apply VIRGO Nova UI redesign"
+            git commit -m "Apply VIRGO Autoplay v1"
             if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
             git push origin HEAD:${{ github.ref_name }}
             if ($LASTEXITCODE -ne 0) { throw "git push failed" }
