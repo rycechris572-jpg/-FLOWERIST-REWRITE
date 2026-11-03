@@ -105,13 +105,28 @@ $new = @'
     bool m_autoWasActive = false;
 '@
 $main = Replace-Once $main '    unsigned int m_suppressedConsoleMessages = 0;' $new "Autoplay runtime state"
+
+# IMPORTANT: use the full init() context here. The one-line anchor also occurs
+# in the member declaration inserted above, so matching it alone is ambiguous.
+$old = @'
+        m_lastConsolePrintMs = 0;
+        m_suppressedConsoleMessages = 0;
+    }
+
+    void quit() {
+'@
 $new = @'
+        m_lastConsolePrintMs = 0;
         m_suppressedConsoleMessages = 0;
         m_autoDecisionCooldown = 0;
         m_autoTapReleaseTicks = 0;
         m_autoWasActive = false;
+    }
+
+    void quit() {
 '@
-$main = Replace-Once $main '        m_suppressedConsoleMessages = 0;' $new "Autoplay init state"
+$main = Replace-Once $main $old $new "Autoplay init state"
+
 $old = @'
         m_rapidInputStreak = 0;
     }
