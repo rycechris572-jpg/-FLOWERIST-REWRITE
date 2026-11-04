@@ -141,22 +141,44 @@ $main = Replace-Once $main `
     $new `
     "Autoplay runtime state"
 
-# FIXED: match only the end of quit(), without relying on the next comment.
-$old = @'
-        m_rapidInputStreak = 0;
-    }
-'@
+$quitSignature = '    void quit() {'
+$quitCount = ([regex]::Matches(
+    $main, [regex]::Escape($quitSignature)
+)).Count
 
-$new = @'
-        m_rapidInputStreak = 0;
+if ($quitCount -ne 1) {
+    throw "Expected one quit() function; found $quitCount. No files were written."
+}
+
+$quitStart = $main.IndexOf($quitSignature)
+$quitOpen = $main.IndexOf('{', $quitStart)
+$depth = 0
+$quitEnd = -1
+
+for ($i = $quitOpen; $i -lt $main.Length; $i++) {
+    if ($main[$i] -eq '{') {
+        $depth++
+    }
+    elseif ($main[$i] -eq '}') {
+        $depth--
+        if ($depth -eq 0) {
+            $quitEnd = $i
+            break
+        }
+    }
+}
+
+if ($quitEnd -lt 0) {
+    throw "Could not locate the end of quit(). No files were written."
+}
+
+$resetCode = @'
         m_autoDecisionCooldown = 0;
         m_autoTapReleaseTicks = 0;
         m_autoWasActive = false;
-    }
 '@
 
-$main = Replace-Once $main $old $new "Autoplay quit state"
-
+$main = $main.Insert($quitEnd, "`n$resetCode")
 $main = Replace-Once $main `
     '        if (!m_enabled) return;' `
     "        if (virgo::autoPlayEnabled) return;`n        if (!m_enabled) return;" `
