@@ -16,11 +16,19 @@ function Write-TextLF([string]$Path, [string]$Content) {
 }
 
 function Replace-Once([string]$Source, [string]$Old, [string]$New, [string]$Label) {
+function Replace-Once([string]$Source, [string]$Old, [string]$New, [string]$Label) {
+    # Normalize line endings before matching.
+    $Source = $Source.Replace("`r`n", "`n").Replace("`r", "`n")
+    $Old = $Old.Replace("`r`n", "`n").Replace("`r", "`n")
+    $New = $New.Replace("`r`n", "`n").Replace("`r", "`n")
+
     if ($Source.Contains($New)) { return $Source }
+
     $count = ([regex]::Matches($Source, [regex]::Escape($Old))).Count
     if ($count -ne 1) {
         throw "Expected one patch anchor for '$Label'; found $count. No files were written."
     }
+
     return $Source.Replace($Old, $New)
 }
 
