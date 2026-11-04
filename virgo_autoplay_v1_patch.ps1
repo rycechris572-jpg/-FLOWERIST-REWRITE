@@ -1,137 +1,95 @@
-    void setupHasCompleted() {
-        PlayLayer::setupHasCompleted();
+$ErrorActionPreference = "Stop"
 
-        virgo::brainLevelObjects.clear();
-        virgo::brainLevelObjectKeys.clear();
-
-        if (m_objects) {
-            for (auto* object : CCArrayExt<GameObject>(m_objects)) {
-                virgo::brainRecordLevelObject(object);
-            }
-        }
-
-        log::info(
-            "VIRGO indexed {} level objects for Brain/Autoplay.",
-            virgo::brainCurrentLevelLayoutCount()
-        );
+function Read-TextLF([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Required file not found: $Path"
     }
+    return ([System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Path))).Replace("`r`n", "`n").Replace("`r", "`n")
+}
 
-    void destroyPlayer(PlayerObject* player, GameObject* gameObject) {
-'@
+function Write-TextLF([string]$Path, [string]$Content) {
+    [System.IO.File]::WriteAllText(
+        [System.IO.Path]::GetFullPath($Path),
+        $Content,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+}
 
-$main = Replace-Once $main `
-    '    void destroyPlayer(PlayerObject* player, GameObject* gameObject) {' `
-    $new `
-    "PlayLayer level object scan"
-
-$main = Replace-Once $main `
-    '            virgo::brainRecordProgress(getPositionX());' `
-    "            virgo::brainRecordProgress(getPositionX());`n            s_sim.autoplayStep(this);" `
-    "Call autopilot after real player update"
-
-$old = @'
-        s_sim.quit();
+function Replace-Once([string]$Source, [string]$Old, [string]$New, [string]$Label) {
+    if ($Source.Contains($New)) { return $Source }
+    $count = ([regex]::Matches($Source, [regex]::Escape($Old))).Count
+    if ($count -ne 1) {
+        throw "Expected one patch anchor for '$Label'; found $count. No files were written."
     }
+    return $Source.Replace($Old, $New)
+}
+
+$brain = Read-TextLF "src/VirgoBrain.hpp"
+$main = Read-TextLF "src/main.cpp"
+$ui = Read-TextLF "src/FloweristUI.cpp"
+
+# ------------------------------------------------------------
+# BRAIN: level object map
+# ------------------------------------------------------------
+
+$brain = Replace-Once $brain '#include <string>' "#include <string>`n#include <vector>`n#include <unordered_set>`n#include <limits>" "Brain STL includes"
+
+$new = @'
+inline int brainActiveGameMode = Cube;
+
+struct BrainLevelObject {
+    int objectId = 0;
+    int objectType = 0;
+    float x = 0.f;
+    float y = 0.f;
+    int qx = 0;
+    int qy = 0;
 };
 
-class $modify(BufEditorLayer, LevelEditorLayer) {
+inline std::vector<BrainLevelObject> brainLevelObjects;
+inline std::unordered_set<std::string> brainLevelObjectKeys;
 '@
+
+$brain = Replace-Once $brain 'inline int brainActiveGameMode = Cube;' $new "Brain level object model"
+
+$brain = Replace-Once $brain `
+    '    brainActiveGameMode = (mode >= 0 && mode < ModeCount) ? mode : Cube;' `
+    "    brainActiveGameMode = (mode >= 0 && mode < ModeCount) ? mode : Cube;`n    brainLevelObjects.clear();`n    brainLevelObjectKeys.clear();" `
+    "Clear level object map"
 
 $new = @'
-        s_sim.quit();
-        virgo::brainLevelObjects.clear();
-        virgo::brainLevelObjectKeys.clear();
-    }
-};
+inline void brainRecordLevelObject(GameObject* object) {
+    if (!object) return;
 
-class $modify(BufEditorLayer, LevelEditorLayer) {
-'@
+    const int objectId = object->m_objectID;
+    const int objectType = static_cast<int>(object->m_objectType);
+    const float x = object->getPositionX();
+    const float y = object->getPositionY();
+    const int qx = static_cast<int>(std::lround(x / 5.f));
+    const int qy = static_cast<int>(std::lround(y / 5.f));
 
-$main = Replace-Once $main $old $new "Clear level object map on quit"
+    const std::string localKey = std::to_string(objectId) + "." +
+        std::to_string(objectType) + "." + std::to_string(qx) + "." +
+        std::to_string(qy);
+    if (!brainLevelObjectKeys.insert(localKey).second) return;
 
-# ------------------------------------------------------------
-# UI: autoplay control
-# ------------------------------------------------------------
+    brainLevelObjects.push_back({objectId, objectType, x, y, qx, qy});
 
-$old = @'
-            text(m_content, "EXECUTION: NOT ACTIVE YET", 548, 245, 194, 12,
-                 ccc3(213, 171, 132), "chatFont.fnt", .34f);
-            text(m_content, "SETUP IS SAVED", 548, 225, 194, 11,
-                 ccc3(157, 143, 183), "chatFont.fnt", .33f);
-'@
+    if (!brainLearningEnabled || brainActiveLevelId == 0) return;
+    auto* mod = geode::Mod::get();
+    if (!mod) return;
 
-$new = @'
-            button(m_content,
-                   virgo::autoPlayEnabled ? "AUTOPLAY ON" : "AUTOPLAY OFF",
-                   548, 241, 136, 23, 402, true, false,
-                   virgo::autoPlayEnabled ? 1 : 2);
-
-            const std::string mapStatus =
-                virgo::brainCurrentLevelLayoutCount() > 0
-                ? "MAP READY: " +
-                    std::to_string(virgo::brainCurrentLevelLayoutCount()) +
-                    " OBJECTS"
-                : "ENTER A LEVEL TO SCAN ITS MAP";
-
-            text(m_content, mapStatus, 548, 219, 194, 11,
-                 ccc3(157, 143, 183), "chatFont.fnt", .31f);
-'@
-
-$ui = Replace-Once $ui $old $new "Autoplay UI control"
-
-$new = @'
-        } else if (tag == 402) {
-            virgo::autoPlayEnabled = !virgo::autoPlayEnabled;
-            virgo::saveSettings();
-            buildContent();
-            return;
-        } else if (tag >= 410 && tag < 414) {
-'@
-
-$ui = Replace-Once $ui `
-    '        } else if (tag >= 410 && tag < 414) {' `
-    $new `
-    "Autoplay UI action"
-
-# ------------------------------------------------------------
-# VALIDATION: check all files before writing any changes
-# ------------------------------------------------------------
-
-foreach ($item in @(
-    'inline void brainRecordLevelObject(GameObject* object)',
-    'inline float brainNextHazardDistance(float playerX)',
-    'inline std::uint64_t brainCurrentLevelLayoutCount()',
-    'brainLevelObjects.clear();'
-)) {
-    if (-not $brain.Contains($item)) {
-        throw "Brain Autoplay integration missing: $item"
+    const auto key = brainObjectKey("layout", objectId, x, y) +
+                     ".type." + std::to_string(objectType);
+    if (!mod->getSavedValue<bool>(key + ".seen", false)) {
+        mod->setSavedValue<bool>(key + ".seen", true);
+        brainIncrement(brainLevelPrefix(brainActiveLevelId) + "layout-objects");
     }
 }
 
-foreach ($item in @(
-    'void autoplayStep(PlayerObject* player)',
-    's_sim.autoplayStep(this);',
-    'void setupHasCompleted()',
-    'if (virgo::autoPlayEnabled) return;'
-)) {
-    if (-not $main.Contains($item)) {
-        throw "Main Autoplay integration missing: $item"
-    }
+inline std::uint64_t brainCurrentLevelLayoutCount() {
+    return static_cast<std::uint64_t>(brainLevelObjects.size());
 }
 
-foreach ($item in @(
-    'AUTOPLAY ON',
-    'tag == 402',
-    'brainCurrentLevelLayoutCount()'
-)) {
-    if (-not $ui.Contains($item)) {
-        throw "UI Autoplay integration missing: $item"
-    }
-}
-
-# Write only after every replacement and validation succeeds.
-Write-TextLF "src/VirgoBrain.hpp" $brain
-Write-TextLF "src/main.cpp" $main
-Write-TextLF "src/FloweristUI.cpp" $ui
-
-Write-Host "VIRGO Autoplay v1 patch applied."
+inline float brainNextHazardDistance(float playerX) {
+    float best = std::numeric_limits<float>::infinity();
