@@ -9,6 +9,7 @@
 #include <Windows.h>
 #include <cstdio>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include "VirgoShared.hpp"
 #include "VirgoBrain.hpp"
@@ -92,6 +93,11 @@ private:
     unsigned long long m_lastConsolePrintMs = 0;
     unsigned int m_suppressedConsoleMessages = 0;
 
+    // Experimental simulation-driven autopilot state.
+    int m_autoDecisionCooldown = 0;
+    int m_autoTapReleaseTicks = 0;
+    bool m_autoWasActive = false;
+
     PlayerObject* createTrajectoryPlayer() {
         PlayLayer* pl = PlayLayer::get();
         if (!pl) return nullptr;
@@ -172,7 +178,9 @@ public:
         m_waitTicks = -1;
         m_queuedOpposite = false;
         m_rapidInputStreak = 0;
-    }
+        m_autoDecisionCooldown = 0;
+        m_autoTapReleaseTicks = 0;
+        m_autoWasActive = false;    }
 
     // F6 cycles through nine presets (maximum 60) and OFF.
     // Single-value presets use the same tick limit for normal and wave.
@@ -223,7 +231,8 @@ public:
         m_queuedOpposite = false;
         m_gameHolding = false;
         m_rapidInputStreak = 0;
-        return false;
+        m_autoTapReleaseTicks = 0;
+        m_autoDecisionCooldown = 8;        return false;
     }
 
     void setFrameDelta(float dt) {
@@ -341,6 +350,13 @@ public:
 
         // Always record the user's true physical mouse/key state first!
         m_physicalHolding = push;
+        PlayLayer* activeLayer = PlayLayer::get();
+        const bool practiceBlocked = virgo::autoPlayEnabled && virgo::autoPlayMode == 1 &&
+                                     (!activeLayer || !activeLayer->m_isPracticeMode);
+        const bool twoPlayerBlocked = virgo::autoPlayEnabled && activeLayer && activeLayer->m_level &&
+                                      activeLayer->m_level->m_twoPlayerMode;
+        const bool mapReady = !virgo::brainLevelObjects.empty();
+        if (virgo::autoPlayEnabled && mapReady && !practiceBlocked && !twoPlayerBlocked) return false;
 
         if (!m_enabled) {
             m_gameHolding = push;
@@ -535,6 +551,19 @@ public:
             refreshBufferHud();
         }
 
+        PlayLayer* pilotLayer = PlayLayer::get();
+        const bool pilotPracticeBlocked =
+            virgo::autoPlayEnabled && virgo::autoPlayMode == 1 &&
+            (!pilotLayer || !pilotLayer->m_isPracticeMode);
+        const bool pilotTwoPlayerBlocked =
+            virgo::autoPlayEnabled && pilotLayer && pilotLayer->m_level &&
+            pilotLayer->m_level->m_twoPlayerMode;
+        const bool pilotOwnsInput =
+            virgo::autoPlayEnabled &&
+            !virgo::brainLevelObjects.empty() &&
+            !pilotPracticeBlocked &&
+            !pilotTwoPlayerBlocked;
+        if (pilotOwnsInput) return;
         if (!m_enabled) return;
 
         if (m_ticksSinceLastInput < 999) {
@@ -571,6 +600,156 @@ public:
             if (m_gameHolding != m_physicalHolding) {
                 m_SimFireButton(pl, m_physicalHolding);
             }
+        }
+    }
+
+    // Experimental v1 pilot. A heuristic controller, not a full-level solver.
+    void autoplayStep(PlayerObject* player) {
+        PlayLayer* pl = PlayLayer::get();
+        if (!pl || !player || player != pl->m_player1 || m_simulating) return;
+
+        const bool practiceBlocked = virgo::autoPlayEnabled &&
+                                     virgo::autoPlayMode == 1 &&
+                                     !pl->m_isPracticeMode;
+        const bool twoPlayerBlocked = pl->m_level &&
+                                      pl->m_level->m_twoPlayerMode;
+
+        const bool canOperate =
+            virgo::autoPlayEnabled &&
+            !practiceBlocked &&
+            !twoPlayerBlocked &&
+            !player->m_isDead &&
+            !virgo::brainLevelObjects.empty();
+
+        if (!canOperate) {
+            if (m_autoWasActive) {
+                if (m_gameHolding) m_SimFireButton(pl, false);
+                m_physicalHolding = false;
+            }
+
+            m_autoWasActive = false;
+            m_autoDecisionCooldown = 0;
+            m_autoTapReleaseTicks = 0;
+            return;
+        }
+
+        if (!m_autoWasActive) {
+            if (m_gameHolding) m_SimFireButton(pl, false);
+            m_physicalHolding = false;
+            m_waitTicks = -1;
+            m_queuedOpposite = false;
+        }
+
+        m_autoWasActive = true;
+
+        if (m_autoTapReleaseTicks > 0) {
+            --m_autoTapReleaseTicks;
+            if (m_autoTapReleaseTicks == 0 && m_gameHolding) {
+                m_SimFireButton(pl, false);
+            }
+            return;
+        }
+
+        if (m_autoDecisionCooldown > 0) {
+            --m_autoDecisionCooldown;
+            return;
+        }
+
+        // The four selectable presets now alter the pilot's actual scan profile.
+        // These are VIRGO tuning profiles, not claims to reproduce a player's inputs.
+        const int selectedPreset = std::clamp(virgo::autoPlayPreset, -1, 3);
+        int lookaheadTicks = 32;
+        int decisionCooldown = 24;
+        int minImprovement = 3;
+        float triggerDistance = 115.f;
+
+        switch (selectedPreset) {
+            case 0: // ZOINK: quicker, more responsive decisions
+                lookaheadTicks = 24;
+                decisionCooldown = 18;
+                minImprovement = 2;
+                triggerDistance = 100.f;
+                break;
+            case 1: // TRICK: balanced scan profile
+                lookaheadTicks = 32;
+                decisionCooldown = 24;
+                minImprovement = 3;
+                triggerDistance = 115.f;
+                break;
+            case 2: // DOGGIE: longer lookahead, more conservative changes
+                lookaheadTicks = 40;
+                decisionCooldown = 30;
+                minImprovement = 5;
+                triggerDistance = 140.f;
+                break;
+            case 3: // NETTERMIND: longer scan with a moderate threshold
+                lookaheadTicks = 36;
+                decisionCooldown = 27;
+                minImprovement = 3;
+                triggerDistance = 130.f;
+                break;
+            default:
+                break;
+        }
+
+        // Throttle every decision attempt, including decisions that do not change
+        // the button state. This prevents two full simulations from running each frame.
+        m_autoDecisionCooldown = decisionCooldown;
+
+        const float hazardDistance =
+            virgo::brainNextHazardDistance(player->getPositionX());
+        const int mode = virgoModeIndex(player);
+
+        const bool impulseMode =
+            mode == virgo::Cube ||
+            mode == virgo::Ball ||
+            mode == virgo::UFO ||
+            mode == virgo::Spider;
+
+        if (!std::isfinite(hazardDistance) || hazardDistance > triggerDistance) {
+            if (!impulseMode && m_gameHolding) {
+                m_SimFireButton(pl, false);
+            }
+            return;
+        }
+
+        if (impulseMode) {
+            if (mode == virgo::Cube && !player->m_isOnGround) return;
+            if (m_gameHolding) return;
+
+            const int coast = getSurvivalTicks(
+                pl, player, pl->m_player2,
+                pl->m_gameState.m_isDualMode && pl->m_player2 != nullptr,
+                0, false, lookaheadTicks
+            );
+
+            const int tap = getSurvivalTicks(
+                pl, player, pl->m_player2,
+                pl->m_gameState.m_isDualMode && pl->m_player2 != nullptr,
+                0, true, lookaheadTicks
+            );
+
+            if (tap >= coast + minImprovement) {
+                m_SimFireButton(pl, true);
+                m_autoTapReleaseTicks = 1;
+            }
+            return;
+        }
+
+        const bool dual =
+            pl->m_gameState.m_isDualMode && pl->m_player2 != nullptr;
+        PlayerObject* p2 = dual ? pl->m_player2 : nullptr;
+
+        const int keepScore = getSurvivalTicks(
+            pl, player, p2, dual, 0, m_gameHolding, lookaheadTicks
+        );
+
+        const int switchScore = getSurvivalTicks(
+            pl, player, p2, dual, 0, !m_gameHolding, lookaheadTicks
+        );
+
+        if (switchScore >= keepScore + minImprovement) {
+            m_SimFireButton(pl, !m_gameHolding);
         }
     }
 
@@ -635,6 +814,24 @@ class $modify(BufPlayLayer, PlayLayer) {
         return true;
     }
 
+    void setupHasCompleted() {
+        PlayLayer::setupHasCompleted();
+
+        virgo::brainLevelObjects.clear();
+        virgo::brainLevelObjectKeys.clear();
+
+        if (m_objects) {
+            for (auto* object : CCArrayExt<GameObject>(m_objects)) {
+                virgo::brainRecordLevelObject(object);
+            }
+        }
+
+        log::info(
+            "VIRGO indexed {} level objects for Brain/Autoplay.",
+            virgo::brainCurrentLevelLayoutCount()
+        );
+    }
+
     void destroyPlayer(PlayerObject* player, GameObject* gameObject) {
         if (s_sim.checkSimulationDeath(player)) return;
         PlayLayer::destroyPlayer(player, gameObject);
@@ -654,7 +851,9 @@ class $modify(BufPlayLayer, PlayLayer) {
         s_bufferHud = nullptr;
         PlayLayer::onQuit();
         s_sim.quit();
-    }
+    
+        virgo::brainLevelObjects.clear();
+        virgo::brainLevelObjectKeys.clear();}
 };
 
 class $modify(BufEditorLayer, LevelEditorLayer) {
@@ -725,6 +924,7 @@ class $modify(BufPlayerObject, PlayerObject) {
         if (PlayLayer::get() && !s_sim.isSimulating()) {
             s_sim.setFrameDelta(dt);
             virgo::brainRecordProgress(getPositionX());
+            s_sim.autoplayStep(this);
         }
     }
 

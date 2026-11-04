@@ -766,10 +766,20 @@ class FloweristOverlay final : public CCLayer {
                    493, 276, 88, 24, 400, true, false, virgo::brainLearningEnabled ? 3 : 2);
             button(m_content, virgo::autoPlayMode == 0 ? "NORMAL" : "PRACTICE",
                    602, 276, 96, 24, 401, true, false, 1);
-            text(m_content, "EXECUTION: NOT ACTIVE YET", 548, 245, 194, 12,
-                 ccc3(213, 171, 132), "chatFont.fnt", .34f);
-            text(m_content, "SETUP IS SAVED", 548, 225, 194, 11,
-                 ccc3(157, 143, 183), "chatFont.fnt", .33f);
+            button(m_content,
+                   virgo::autoPlayEnabled ? "AUTOPLAY ON" : "AUTOPLAY OFF",
+                   548, 241, 136, 23, 402, true, false,
+                   virgo::autoPlayEnabled ? 1 : 2);
+
+            const std::string mapStatus =
+                virgo::brainCurrentLevelLayoutCount() > 0
+                ? "MAP READY: " +
+                    std::to_string(virgo::brainCurrentLevelLayoutCount()) +
+                    " OBJECTS"
+                : "ENTER A LEVEL TO SCAN ITS MAP";
+
+            text(m_content, mapStatus, 548, 219, 194, 11,
+                 ccc3(157, 143, 183), "chatFont.fnt", .31f);
 
             // Presets are a separate, evenly-spaced control row.
             card(m_content, 205, 137, 453, 62, rgba(24, 27, 58, 255));
@@ -1048,6 +1058,11 @@ class FloweristOverlay final : public CCLayer {
             return;
         } else if (tag == 401) {
             virgo::autoPlayMode = virgo::autoPlayMode == 0 ? 1 : 0;
+            virgo::saveSettings();
+            buildContent();
+            return;
+        } else if (tag == 402) {
+            virgo::autoPlayEnabled = !virgo::autoPlayEnabled;
             virgo::saveSettings();
             buildContent();
             return;
