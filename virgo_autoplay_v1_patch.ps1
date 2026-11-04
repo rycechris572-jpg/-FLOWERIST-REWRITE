@@ -96,11 +96,8 @@ inline float brainNextHazardDistance(float playerX) {
 
     for (const auto& object : brainLevelObjects) {
         const bool hazard =
-            object.objectType == static_cast<int>(GameObjectType::Solid) ||
             object.objectType == static_cast<int>(GameObjectType::Hazard) ||
-            object.objectType == static_cast<int>(GameObjectType::AnimatedHazard) ||
-            object.objectType == static_cast<int>(GameObjectType::CollisionObject) ||
-            object.objectType == static_cast<int>(GameObjectType::Slope);
+            object.objectType == static_cast<int>(GameObjectType::AnimatedHazard);
 
         if (!hazard || object.x < playerX - 5.f) continue;
 
@@ -467,21 +464,15 @@ $main = Replace-Once $main `
     "Call autopilot after real player update"
 
 $old = @'
+        PlayLayer::onQuit();
         s_sim.quit();
-    }
-};
-
-class $modify(BufEditorLayer, LevelEditorLayer) {
 '@
 
 $new = @'
+        PlayLayer::onQuit();
         s_sim.quit();
         virgo::brainLevelObjects.clear();
         virgo::brainLevelObjectKeys.clear();
-    }
-};
-
-class $modify(BufEditorLayer, LevelEditorLayer) {
 '@
 
 $main = Replace-Once $main $old $new "Clear level object map on quit"
