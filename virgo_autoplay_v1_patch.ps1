@@ -16,7 +16,6 @@ function Write-TextLF([string]$Path, [string]$Content) {
 }
 
 function Replace-Once([string]$Source, [string]$Old, [string]$New, [string]$Label) {
-function Replace-Once([string]$Source, [string]$Old, [string]$New, [string]$Label) {
     # Normalize line endings before matching.
     $Source = $Source.Replace("`r`n", "`n").Replace("`r", "`n")
     $Old = $Old.Replace("`r`n", "`n").Replace("`r", "`n")
