@@ -463,19 +463,47 @@ $main = Replace-Once $main `
     "            virgo::brainRecordProgress(getPositionX());`n            s_sim.autoplayStep(this);" `
     "Call autopilot after real player update"
 
-$old = @'
-        PlayLayer::onQuit();
-        s_sim.quit();
-'@
+# Find PlayLayer::onQuit() without an exact-text anchor.
+$quitSignature = '    void onQuit() {'
+$onQuitCount = ([regex]::Matches($main, [regex]::Escape($quitSignature))).Count
 
-$new = @'
-        PlayLayer::onQuit();
-        s_sim.quit();
-        virgo::brainLevelObjects.clear();
-        virgo::brainLevelObjectKeys.clear();
-'@
+if ($onQuitCount -ne 1) {
+    throw "Expected one PlayLayer onQuit() method; found $onQuitCount. No files were written."
+}
 
-$main = Replace-Once $main $old $new "Clear level object map on quit"
+$onQuitStart = $main.IndexOf($quitSignature)
+$onQuitOpen = $main.IndexOf('{', $onQuitStart)
+$depth = 0
+$onQuitEnd = -1
+
+for ($i = $onQuitOpen; $i -lt $main.Length; $i++) {
+    if ($main[$i] -eq '{') {
+        $depth++
+    }
+    elseif ($main[$i] -eq '}') {
+        $depth--
+        if ($depth -eq 0) {
+            $onQuitEnd = $i
+            break
+        }
+    }
+}
+
+if ($onQuitEnd -lt 0) {
+    throw "Could not locate the end of PlayLayer onQuit(). No files were written."
+}
+
+$onQuitBody = $main.Substring(
+    $onQuitStart,
+    $onQuitEnd - $onQuitStart
+)
+
+if (-not $onQuitBody.Contains('virgo::brainLevelObjects.clear();')) {
+    $main = $main.Insert(
+        $onQuitEnd,
+        "`n        virgo::brainLevelObjects.clear();`n        virgo::brainLevelObjectKeys.clear();"
+    )
+}
 
 # ------------------------------------------------------------
 # UI: autoplay control
