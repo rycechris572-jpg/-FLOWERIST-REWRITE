@@ -31,6 +31,22 @@ struct BrainLevelObject {
 inline std::vector<BrainLevelObject> brainLevelObjects;
 inline std::unordered_set<std::string> brainLevelObjectKeys;
 
+// Cached best progress avoids reading Geode saved data on every player update.
+inline int brainBestXCache = 0;
+inline int brainBestXCacheLevelId = 0;
+
+struct BrainLevelObject {
+    int objectId = 0;
+    int objectType = 0;
+    float x = 0.f;
+    float y = 0.f;
+    int qx = 0;
+    int qy = 0;
+};
+
+inline std::vector<BrainLevelObject> brainLevelObjects;
+inline std::unordered_set<std::string> brainLevelObjectKeys;
+
 inline std::string brainLevelPrefix(int levelId) {
     return std::string("brain.level.") + std::to_string(levelId) + ".";
 }
@@ -156,6 +172,55 @@ inline void brainCommitLevelLayout() {
             brainLevelPrefix(brainActiveLevelId) + "layout-objects",
             static_cast<std::uint64_t>(brainLevelObjects.size())
         );
+    }
+}
+
+inline std::uint64_t brainCurrentLevelLayoutCount() {
+    return static_cast<std::uint64_t>(brainLevelObjects.size());
+}
+
+inline float brainNextHazardDistance(float playerX) {
+    float best = std::numeric_limits<float>::infinity();
+
+    for (const auto& object : brainLevelObjects) {
+        const bool hazard =
+            object.objectType == static_cast<int>(GameObjectType::Hazard) ||
+            object.objectType == static_cast<int>(GameObjectType::AnimatedHazard);
+
+        if (!hazard || object.x < playerX - 5.f) continue;
+
+        best = std::min(best, std::max(0.f, object.x - playerX));
+    }
+
+    return best;
+}
+
+inline void brainRecordLevelObject(GameObject* object) {
+    if (!object) return;
+
+    const int objectId = object->m_objectID;
+    const int objectType = static_cast<int>(object->m_objectType);
+    const float x = object->getPositionX();
+    const float y = object->getPositionY();
+    const int qx = static_cast<int>(std::lround(x / 5.f));
+    const int qy = static_cast<int>(std::lround(y / 5.f));
+
+    const std::string localKey = std::to_string(objectId) + "." +
+        std::to_string(objectType) + "." + std::to_string(qx) + "." +
+        std::to_string(qy);
+    if (!brainLevelObjectKeys.insert(localKey).second) return;
+
+    brainLevelObjects.push_back({objectId, objectType, x, y, qx, qy});
+
+    if (!brainLearningEnabled || brainActiveLevelId == 0) return;
+    auto* mod = geode::Mod::get();
+    if (!mod) return;
+
+    const auto key = brainObjectKey("layout", objectId, x, y) +
+                     ".type." + std::to_string(objectType);
+    if (!mod->getSavedValue<bool>(key + ".seen", false)) {
+        mod->setSavedValue<bool>(key + ".seen", true);
+        brainIncrement(brainLevelPrefix(brainActiveLevelId) + "layout-objects");
     }
 }
 

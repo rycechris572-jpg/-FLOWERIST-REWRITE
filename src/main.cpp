@@ -834,6 +834,24 @@ class $modify(BufPlayLayer, PlayLayer) {
         );
     }
 
+    void setupHasCompleted() {
+        PlayLayer::setupHasCompleted();
+
+        virgo::brainLevelObjects.clear();
+        virgo::brainLevelObjectKeys.clear();
+
+        if (m_objects) {
+            for (auto* object : CCArrayExt<GameObject>(m_objects)) {
+                virgo::brainRecordLevelObject(object);
+            }
+        }
+
+        log::info(
+            "VIRGO indexed {} level objects for Brain/Autoplay.",
+            virgo::brainCurrentLevelLayoutCount()
+        );
+    }
+
     void destroyPlayer(PlayerObject* player, GameObject* gameObject) {
         if (s_sim.checkSimulationDeath(player)) return;
         PlayLayer::destroyPlayer(player, gameObject);
