@@ -18,7 +18,7 @@ jobs:
         shell: pwsh
         run: ./repair_virgo_phase3_build.ps1
 
-       - name: Apply Nova-style VIRGO UI
+      - name: Apply Nova-style VIRGO UI
         shell: pwsh
         run: ./nova_ui_redesign.ps1
 
@@ -29,6 +29,10 @@ jobs:
       - name: Apply VIRGO Autoplay v1
         shell: pwsh
         run: ./virgo_autoplay_v1_patch.ps1
+
+      - name: Fix VIRGO Brain level-load performance
+        shell: pwsh
+        run: ./virgo_brain_loading_fix.ps1
 
       - name: Commit VIRGO source
         shell: pwsh
