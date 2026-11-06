@@ -120,24 +120,62 @@ CCLabelBMFont* text(CCNode* parent, const std::string& value, float x, float y,
     return node;
 }
 
+// VIRGO V3 GRADIENT CARD SYSTEM
 void card(CCNode* parent, float x, float y, float w, float h,
           ccColor4B fill = rgba(20, 25, 49, 250)) {
     (void)fill;
-    // Nova-style surface: quiet plum fill, fine lavender edge, restrained shadow.
-    roundedRect(parent, x + 3.f, y - 4.f, w, h, 13.f,
-                ccc4f(.006f, .004f, .014f, .72f), 1);
-    roundedRect(parent, x, y, w, h, 13.f,
-                ccc4f(.37f, .29f, .49f, .92f), 2);
-    roundedRect(parent, x + 1.2f, y + 1.2f, w - 2.4f, h - 2.4f, 12.f,
-                ccc4f(.055f, .043f, .075f, .99f), 3);
-    roundedRect(parent, x + 2.5f, y + 2.5f, w - 5.f, h - 5.f, 10.f,
-                ccc4f(.078f, .060f, .101f, .99f), 4);
 
-    auto glint = CCDrawNode::create();
-    if (glint) {
-        glint->drawSegment({x + 18.f, y + h - 7.f}, {x + w - 18.f, y + h - 7.f},
-                           .65f, ccc4f(.83f, .73f, .94f, .16f));
-        parent->addChild(glint, 5);
+    roundedRect(parent, x + 3.f, y - 4.f, w, h, 14.f,
+                ccc4f(.002f, .004f, .018f, .78f), 1);
+
+    roundedRect(parent, x, y, w, h, 14.f,
+                ccc4f(.10f, .13f, .25f, .98f), 2);
+
+    roundedRect(parent, x + 1.5f, y + 1.5f, w - 3.f, h - 3.f, 12.5f,
+                ccc4f(.035f, .045f, .095f, .995f), 3);
+
+    roundedRect(parent, x + 3.f, y + 3.f, w - 6.f, h - 6.f, 10.5f,
+                ccc4f(.050f, .055f, .105f, .995f), 4);
+
+    // Cyan -> Blue -> Violet -> Pink gradient accent.
+    auto edge = CCDrawNode::create();
+
+    if (edge) {
+        const ccColor4F colors[] = {
+            ccc4f(.12f, .82f, .96f, .96f),
+            ccc4f(.22f, .55f, 1.f, .96f),
+            ccc4f(.48f, .38f, 1.f, .96f),
+            ccc4f(.78f, .32f, .91f, .96f),
+            ccc4f(1.f, .38f, .72f, .96f)
+        };
+
+        const float left = x + 15.f;
+        const float right = x + w - 15.f;
+        const float top = y + h - 5.f;
+
+        for (int i = 0; i < 5; ++i) {
+            const float a = left + (right - left) *
+                (static_cast<float>(i) / 5.f);
+
+            const float b = left + (right - left) *
+                (static_cast<float>(i + 1) / 5.f);
+
+            edge->drawSegment(
+                {a, top},
+                {b, top},
+                1.35f,
+                colors[i]
+            );
+        }
+
+        edge->drawSegment(
+            {left, top - 2.5f},
+            {right, top - 2.5f},
+            .55f,
+            ccc4f(.48f, .52f, 1.f, .20f)
+        );
+
+        parent->addChild(edge, 5);
     }
 }
 

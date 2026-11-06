@@ -47,6 +47,22 @@ struct BrainLevelObject {
 inline std::vector<BrainLevelObject> brainLevelObjects;
 inline std::unordered_set<std::string> brainLevelObjectKeys;
 
+// Cached best progress avoids reading Geode saved data on every player update.
+inline int brainBestXCache = 0;
+inline int brainBestXCacheLevelId = 0;
+
+struct BrainLevelObject {
+    int objectId = 0;
+    int objectType = 0;
+    float x = 0.f;
+    float y = 0.f;
+    int qx = 0;
+    int qy = 0;
+};
+
+inline std::vector<BrainLevelObject> brainLevelObjects;
+inline std::unordered_set<std::string> brainLevelObjectKeys;
+
 inline std::string brainLevelPrefix(int levelId) {
     return std::string("brain.level.") + std::to_string(levelId) + ".";
 }
