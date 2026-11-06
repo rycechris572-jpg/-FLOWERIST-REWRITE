@@ -15,6 +15,10 @@ namespace virgo {
 inline int brainActiveLevelId = 0;
 inline int brainActiveGameMode = Cube;
 
+// Cached best progress avoids reading Geode saved data on every player update.
+inline int brainBestXCache = 0;
+inline int brainBestXCacheLevelId = 0;
+
 struct BrainLevelObject {
     int objectId = 0;
     int objectType = 0;
@@ -57,6 +61,16 @@ inline void brainBeginLevel(int levelId, int mode) {
     brainLevelObjects.clear();
     brainLevelObjectKeys.clear();
 
+    brainBestXCacheLevelId = levelId;
+    brainBestXCache = 0;
+    if (levelId != 0) {
+        if (auto* cacheMod = geode::Mod::get()) {
+            brainBestXCache = cacheMod->getSavedValue<int>(
+                brainLevelPrefix(levelId) + "best-x", 0
+            );
+        }
+    }
+
     if (!brainLearningEnabled || levelId == 0) return;
     auto* mod = geode::Mod::get();
     if (!mod) return;
@@ -77,12 +91,22 @@ inline void brainRecordProgress(float x) {
     auto* mod = geode::Mod::get();
     if (!mod) return;
 
-    // Save progress in 25-unit steps to avoid writing saved data every frame.
+    // Fallback initialization is performed at most once if this function is
+    // reached before the normal level-start cache initialization.
+    if (brainBestXCacheLevelId != brainActiveLevelId) {
+        const auto cacheKey = brainLevelPrefix(brainActiveLevelId) + "best-x";
+        brainBestXCache = mod->getSavedValue<int>(cacheKey, 0);
+        brainBestXCacheLevelId = brainActiveLevelId;
+    }
+
+    // Compare against memory; persist only when a new 25-unit bucket is reached.
     const int progressBucket = std::max(0, static_cast<int>(x / 25.f)) * 25;
-    const auto key = brainLevelPrefix(brainActiveLevelId) + "best-x";
-    const int previous = mod->getSavedValue<int>(key, 0);
-    if (progressBucket > previous) {
-        mod->setSavedValue<int>(key, progressBucket);
+    if (progressBucket > brainBestXCache) {
+        brainBestXCache = progressBucket;
+        mod->setSavedValue<int>(
+            brainLevelPrefix(brainActiveLevelId) + "best-x",
+            brainBestXCache
+        );
     }
 }
 
@@ -118,17 +142,20 @@ inline void brainRecordLevelObject(GameObject* object) {
         std::to_string(qy);
     if (!brainLevelObjectKeys.insert(localKey).second) return;
 
+    // Keep the complete in-memory map for Autoplay's hazard lookahead.
+    // Do not perform Geode saved-data reads/writes inside this per-object loop.
     brainLevelObjects.push_back({objectId, objectType, x, y, qx, qy});
+}
 
+inline void brainCommitLevelLayout() {
     if (!brainLearningEnabled || brainActiveLevelId == 0) return;
-    auto* mod = geode::Mod::get();
-    if (!mod) return;
-
-    const auto key = brainObjectKey("layout", objectId, x, y) +
-                     ".type." + std::to_string(objectType);
-    if (!mod->getSavedValue<bool>(key + ".seen", false)) {
-        mod->setSavedValue<bool>(key + ".seen", true);
-        brainIncrement(brainLevelPrefix(brainActiveLevelId) + "layout-objects");
+    if (auto* mod = geode::Mod::get()) {
+        // One persisted write after indexing, rather than multiple operations
+        // for every unique object in a large online level.
+        mod->setSavedValue<std::uint64_t>(
+            brainLevelPrefix(brainActiveLevelId) + "layout-objects",
+            static_cast<std::uint64_t>(brainLevelObjects.size())
+        );
     }
 }
 
@@ -214,9 +241,7 @@ inline std::uint64_t brainCurrentLevelEffects() {
 
 inline int brainCurrentLevelBestX() {
     if (brainActiveLevelId == 0) return 0;
-    auto* mod = geode::Mod::get();
-    return mod ? mod->getSavedValue<int>(
-        brainLevelPrefix(brainActiveLevelId) + "best-x", 0) : 0;
+    return brainBestXCacheLevelId == brainActiveLevelId ? brainBestXCache : 0;
 }
 
 inline std::uint64_t brainTotalOrbLocations() {

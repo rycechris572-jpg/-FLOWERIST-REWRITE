@@ -826,6 +826,8 @@ class $modify(BufPlayLayer, PlayLayer) {
             }
         }
 
+        virgo::brainCommitLevelLayout();
+
         log::info(
             "VIRGO indexed {} level objects for Brain/Autoplay.",
             virgo::brainCurrentLevelLayoutCount()
